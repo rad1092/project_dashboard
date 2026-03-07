@@ -1,0 +1,30 @@
+[project]
+name = "project_dashboard"
+version = "0.1.0"
+description = "Streamlit workspace for documenting projects, analysis, and learning"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "altair==4.2.2",
+    "folium>=0.20.0",
+    "jupyter>=1.1.1",
+    "koreanize-matplotlib>=0.1.1",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.2",
+    "opencv-contrib-python>=4.13.0.92",
+    "opencv-python>=4.13.0.92",
+    "openpyxl>=3.1.5",
+    "pandas>=2.2,<3",
+    "pillow>=12.1.0",
+    "plotly>=6.6.0",
+    "requests>=2.32.5",
+    "seaborn>=0.13.2",
+    "sqlalchemy>=2.0.47",
+    "statsmodels>=0.14.6",
+    "streamlit>=1.55.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]
