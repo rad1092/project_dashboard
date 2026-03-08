@@ -7,12 +7,12 @@
 
 ## `dashboard/services/disaster_data.py`
 
-이 파일은 외부 `preprocessing_data` 폴더를 찾고, CSV 를 읽고, 특보 요약과 데이터셋 설명 정보를 만든다.
-현재 구조에서 외부 데이터 계약의 중심 파일이다.
+이 파일은 저장소 내부 기본 `preprocessing_data` 폴더를 찾고, CSV 를 읽고, 특보 요약과 데이터셋 설명 정보를 만든다.
+현재 구조에서 데이터 경로 계약의 중심 파일이다.
 
 ### 핵심 함수
 
-- `resolve_data_dir()`: 외부 데이터 폴더 탐색
+- `resolve_data_dir()`: 기본 데이터 폴더 탐색과 optional override 처리
 - `load_dataset_bundle()`: CSV 4종 로딩
 - `get_recent_alerts()`: 최근 특보 일부 반환
 - `build_alert_summary()`: 추천 페이지 상단 요약

@@ -39,9 +39,9 @@
 - `test_disaster_data.py`: 경로 탐색, CSV 로딩, 특보 요약 검증
 - `test_shelter_recommendation.py`: 정규화, 거리 계산, 추천 규칙 검증
 
-## 외부 데이터 폴더
+## 데이터 폴더
 
-프로젝트 밖의 `preprocessing_data` 폴더는 다음처럼 본다.
+저장소 안의 `preprocessing_data` 폴더는 다음처럼 본다.
 
 - `preprocessing/*.csv`: 앱이 읽는 전처리 완료 데이터
 - `py/*.py`: 전처리 참고 스크립트
@@ -49,6 +49,8 @@
 - `raw/*.csv`: 원본 데이터
 
 이 폴더의 CSV는 앱에서 수정하지 않는다.
+앱 실행에 실제로 포함되는 파일은 `preprocessing/*.csv` 4개이며,
+나머지 하위 폴더는 참고 자료 또는 원본 보관 용도로만 둔다.
 
 ## 추천 페이지 구조 메모
 

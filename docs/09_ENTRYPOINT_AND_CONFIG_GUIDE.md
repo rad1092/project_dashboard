@@ -4,7 +4,7 @@
 
 - 홈 화면 진입점
 - 현재 데이터 범위와 페이지 순서를 안내
-- 외부 전처리 데이터 폴더가 실제로 읽히는지 가장 먼저 확인하는 화면
+- 저장소 내부 전처리 데이터 폴더가 실제로 읽히는지 가장 먼저 확인하는 화면
 
 ## `dashboard/config.py`
 
@@ -19,6 +19,6 @@
 
 ## `.streamlit/secrets.toml.example`
 
-- `preprocessing_data_dir` 예시 제공
+- `preprocessing_data_dir` 선택적 override 예시 제공
 - 미래 API 키 자리표시자만 포함
 - 실제 키는 Git 에 올리지 않음

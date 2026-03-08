@@ -47,15 +47,16 @@ st.caption(
 )
 
 try:
-    # 홈 화면에서부터 실제 데이터 연결 상태를 확인할 수 있게 외부 데이터 폴더를 바로 읽는다.
+    # 홈 화면에서부터 실제 데이터 연결 상태를 확인할 수 있게 기본 데이터 폴더를 바로 읽는다.
     data_dir = resolve_data_dir()
     bundle = load_dataset_bundle()
     analysis_frame = load_analysis_dataset()
 except FileNotFoundError as exc:
     st.error(str(exc))
     st.info(
-        "`.streamlit/secrets.toml` 또는 `PREPROCESSING_DATA_DIR` 환경변수에 "
-        "`C:/Users/Admin/Desktop/preprocessing_data` 같은 경로를 지정하면 된다."
+        "기본 실행은 저장소 내부 `preprocessing_data` 폴더를 사용한다. "
+        "다른 위치의 데이터를 쓰려면 `.streamlit/secrets.toml` 또는 "
+        "`PREPROCESSING_DATA_DIR` 환경변수로 경로를 덮어쓰면 된다."
     )
     st.stop()
 
@@ -114,7 +115,7 @@ with right:
             st.markdown(f"- {item}")
 
     with st.container(border=True):
-        st.subheader("외부 데이터 폴더")
+        st.subheader("데이터 폴더")
         st.code(str(data_dir), language="text")
         st.write(
             "이 경로의 CSV는 앱이 읽기 전용으로 사용한다. "

@@ -1,4 +1,4 @@
-"""외부 전처리 데이터 폴더를 읽어 앱용 DataFrame 으로 정리하는 서비스 모듈.
+"""전처리 데이터 폴더를 읽어 앱용 DataFrame 으로 정리하는 서비스 모듈.
 
 왜 필요한가:
 - 실제 CSV 는 프로젝트 바깥 ``preprocessing_data`` 폴더에 있고 계속 갱신될 수 있다.
@@ -87,6 +87,18 @@ def _maybe_get_secret_data_dir() -> str | None:
     return None
 
 
+def _get_repo_default_data_dir() -> Path:
+    """저장소에 포함된 기본 전처리 데이터 폴더 경로를 반환한다."""
+
+    return Path(__file__).resolve().parents[2] / "preprocessing_data"
+
+
+def _get_desktop_default_data_dir() -> Path:
+    """기존 로컬 실행 호환용 Desktop 기본 경로를 반환한다."""
+
+    return Path.home() / "Desktop" / "preprocessing_data"
+
+
 def normalize_sigungu_name(value: str | None) -> str:
     """시군구 명칭을 비교용 문자열로 정규화한다.
 
@@ -131,13 +143,14 @@ def _haversine_km(
 
 
 def resolve_data_dir(path_override: str | Path | None = None) -> Path:
-    """외부 전처리 데이터 폴더 경로를 결정한다.
+    """전처리 데이터 폴더 경로를 결정한다.
 
     우선순위:
     1. 함수 인자로 넘긴 경로
     2. 환경변수 ``PREPROCESSING_DATA_DIR``
     3. ``.streamlit/secrets.toml`` 의 ``preprocessing_data_dir``
-    4. ``~/Desktop/preprocessing_data``
+    4. 저장소 내부 ``preprocessing_data``
+    5. ``~/Desktop/preprocessing_data``
     """
 
     candidates: list[Path] = []
@@ -152,20 +165,25 @@ def resolve_data_dir(path_override: str | Path | None = None) -> Path:
     if secret_path:
         candidates.append(Path(secret_path))
 
-    candidates.append(Path.home() / "Desktop" / "preprocessing_data")
+    candidates.append(_get_repo_default_data_dir())
+    candidates.append(_get_desktop_default_data_dir())
 
     # 앞에서부터 우선순위가 높은 경로이므로, exists() 가 되는 첫 후보를 바로 채택한다.
+    checked_paths: list[Path] = []
     for candidate in candidates:
         resolved = candidate.expanduser().resolve()
+        checked_paths.append(resolved)
         if resolved.exists():
             return resolved
 
-    searched = "\n".join(f"- {path}" for path in candidates)
+    searched = "\n".join(f"- {path}" for path in checked_paths)
     raise FileNotFoundError(
         "전처리 데이터 폴더를 찾지 못했다.\n"
+        "기본 실행은 저장소 내부 `preprocessing_data` 폴더를 사용한다.\n"
         "다음 경로를 차례대로 확인했다:\n"
         f"{searched}\n"
-        "환경변수 `PREPROCESSING_DATA_DIR` 또는 `.streamlit/secrets.toml` 에 경로를 지정해 달라."
+        "다른 위치를 쓰려면 환경변수 `PREPROCESSING_DATA_DIR` 또는 "
+        "`.streamlit/secrets.toml` 의 `preprocessing_data_dir` 를 지정해 달라."
     )
 
 
@@ -173,7 +191,15 @@ def _read_csv(path: Path) -> pd.DataFrame:
     """UTF-8 기반 전처리 CSV 를 읽는다."""
 
     # utf-8-sig 를 쓰는 이유는 Windows 환경에서 BOM 이 포함된 CSV 도 안정적으로 읽기 위해서다.
-    return pd.read_csv(path, encoding="utf-8-sig")
+    try:
+        return pd.read_csv(path, encoding="utf-8-sig")
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"전처리 데이터 파일이 없다: {path}\n"
+            "저장소 기본 데이터(`preprocessing_data/preprocessing/*.csv`)가 모두 있는지 확인하거나 "
+            "다른 위치를 쓰려면 `PREPROCESSING_DATA_DIR` 또는 `.streamlit/secrets.toml` 의 "
+            "`preprocessing_data_dir` 를 지정해 달라."
+        ) from exc
 
 
 def _validate_columns(dataframe: pd.DataFrame, expected_columns: list[str], label: str) -> None:

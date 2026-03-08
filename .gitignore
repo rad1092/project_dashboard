@@ -8,3 +8,12 @@ htmlcov/
 dist/
 build/
 *.pyc
+
+# Keep only the runtime-ready CSV dataset in version control.
+preprocessing_data/*
+!preprocessing_data/preprocessing/
+preprocessing_data/preprocessing/*
+!preprocessing_data/preprocessing/danger_clean.csv
+!preprocessing_data/preprocessing/final_shelter_dataset.csv
+!preprocessing_data/preprocessing/earthquake_shelter_clean_2.csv
+!preprocessing_data/preprocessing/tsunami_shelter_clean_2.csv

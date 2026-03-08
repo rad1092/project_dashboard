@@ -17,13 +17,16 @@
 
 ## 데이터 폴더
 
-앱은 기본적으로 `C:/Users/Admin/Desktop/preprocessing_data` 를 읽습니다.
-다른 위치를 쓰고 싶으면 아래 둘 중 하나를 설정하면 됩니다.
+앱은 기본적으로 저장소 내부 `preprocessing_data` 폴더를 읽습니다.
+그래서 클론 직후에도 추가 설정 없이 실행할 수 있습니다.
+
+다른 위치의 전처리 데이터를 쓰고 싶으면 아래 둘 중 하나로 경로를 덮어쓰면 됩니다.
 
 1. 환경변수 `PREPROCESSING_DATA_DIR`
 2. `.streamlit/secrets.toml` 의 `preprocessing_data_dir`
 
-외부 CSV는 읽기 전용으로 사용하며 앱 코드에서 수정하지 않습니다.
+저장소에는 앱 실행에 필요한 `preprocessing_data/preprocessing/*.csv` 만 포함합니다.
+외부 CSV와 저장소 내부 CSV 모두 읽기 전용으로 사용하며 앱 코드에서 수정하지 않습니다.
 
 ## 실행 방법
 

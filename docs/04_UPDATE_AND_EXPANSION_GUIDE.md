@@ -18,9 +18,10 @@
 
 ## 데이터 경로를 바꿀 때
 
-1. `PREPROCESSING_DATA_DIR` 또는 secrets 설정 확인
-2. `dashboard/services/disaster_data.py` 동작 확인
-3. 홈과 추천 페이지에서 로딩되는지 점검
+1. 저장소 내부 `preprocessing_data` 기본 경로를 먼저 확인
+2. 외부 데이터를 쓸 때만 `PREPROCESSING_DATA_DIR` 또는 secrets 설정 확인
+3. `dashboard/services/disaster_data.py` 동작 확인
+4. 홈과 추천 페이지에서 로딩되는지 점검
 
 특히 추천 페이지는 통합 대피소 데이터를 이용해 지역 중심 좌표를 계산하므로,
 경로 변경 뒤에는 `infer_region_from_coordinates()` 가 정상 동작하는지 같이 확인해야 한다.

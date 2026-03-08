@@ -6,6 +6,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from dashboard.services import disaster_data
 from dashboard.services.disaster_data import (
     build_alert_summary,
     build_dataset_catalog,
@@ -22,6 +25,101 @@ def test_resolve_data_dir_uses_override(sample_preprocessing_dir) -> None:
 
     # override 우선순위가 깨지면 테스트와 로컬 실행이 모두 Desktop 기본 경로에 종속될 수 있다.
     assert resolve_data_dir(sample_preprocessing_dir) == sample_preprocessing_dir.resolve()
+
+
+def test_resolve_data_dir_prefers_env_over_secret_and_repo_local(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """환경변수가 secrets 와 저장소 기본 경로보다 우선하는지 확인한다."""
+
+    env_dir = tmp_path / "env_data"
+    secret_dir = tmp_path / "secret_data"
+    repo_dir = tmp_path / "repo_data"
+    desktop_dir = tmp_path / "desktop_data"
+    for path in [env_dir, secret_dir, repo_dir, desktop_dir]:
+        path.mkdir()
+
+    monkeypatch.setenv("PREPROCESSING_DATA_DIR", str(env_dir))
+    monkeypatch.setattr(disaster_data, "_maybe_get_secret_data_dir", lambda: str(secret_dir))
+    monkeypatch.setattr(disaster_data, "_get_repo_default_data_dir", lambda: repo_dir)
+    monkeypatch.setattr(disaster_data, "_get_desktop_default_data_dir", lambda: desktop_dir)
+
+    assert resolve_data_dir() == env_dir.resolve()
+
+
+def test_resolve_data_dir_prefers_secret_over_repo_local(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """환경변수가 없을 때 secrets 가 저장소 기본 경로보다 우선하는지 확인한다."""
+
+    secret_dir = tmp_path / "secret_data"
+    repo_dir = tmp_path / "repo_data"
+    desktop_dir = tmp_path / "desktop_data"
+    for path in [secret_dir, repo_dir, desktop_dir]:
+        path.mkdir()
+
+    monkeypatch.delenv("PREPROCESSING_DATA_DIR", raising=False)
+    monkeypatch.setattr(disaster_data, "_maybe_get_secret_data_dir", lambda: str(secret_dir))
+    monkeypatch.setattr(disaster_data, "_get_repo_default_data_dir", lambda: repo_dir)
+    monkeypatch.setattr(disaster_data, "_get_desktop_default_data_dir", lambda: desktop_dir)
+
+    assert resolve_data_dir() == secret_dir.resolve()
+
+
+def test_resolve_data_dir_uses_repo_local_default_when_no_override(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """아무 설정이 없으면 저장소 내부 기본 경로를 사용한다."""
+
+    repo_dir = tmp_path / "repo_data"
+    desktop_dir = tmp_path / "desktop_data"
+    repo_dir.mkdir()
+    desktop_dir.mkdir()
+
+    monkeypatch.delenv("PREPROCESSING_DATA_DIR", raising=False)
+    monkeypatch.setattr(disaster_data, "_maybe_get_secret_data_dir", lambda: None)
+    monkeypatch.setattr(disaster_data, "_get_repo_default_data_dir", lambda: repo_dir)
+    monkeypatch.setattr(disaster_data, "_get_desktop_default_data_dir", lambda: desktop_dir)
+
+    assert resolve_data_dir() == repo_dir.resolve()
+
+
+def test_resolve_data_dir_falls_back_to_desktop_after_repo_local(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """저장소 기본 경로가 없을 때만 Desktop fallback 으로 내려간다."""
+
+    repo_dir = tmp_path / "missing_repo_data"
+    desktop_dir = tmp_path / "Desktop" / "preprocessing_data"
+    desktop_dir.mkdir(parents=True)
+
+    monkeypatch.delenv("PREPROCESSING_DATA_DIR", raising=False)
+    monkeypatch.setattr(disaster_data, "_maybe_get_secret_data_dir", lambda: None)
+    monkeypatch.setattr(disaster_data, "_get_repo_default_data_dir", lambda: repo_dir)
+    monkeypatch.setattr(disaster_data, "_get_desktop_default_data_dir", lambda: desktop_dir)
+
+    assert resolve_data_dir() == desktop_dir.resolve()
+
+
+def test_load_dataset_bundle_reports_missing_runtime_csv(tmp_path: Path) -> None:
+    """런타임 CSV 가 비었을 때 누락 파일과 override 방법을 함께 알려 준다."""
+
+    missing_base = tmp_path / "preprocessing_data"
+    (missing_base / "preprocessing").mkdir(parents=True)
+
+    try:
+        load_dataset_bundle_uncached(missing_base)
+    except FileNotFoundError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("missing runtime csv should raise FileNotFoundError")
+
+    assert "전처리 데이터 파일이 없다" in message
+    assert "PREPROCESSING_DATA_DIR" in message
 
 
 def test_load_dataset_bundle_reads_expected_frames(sample_preprocessing_dir) -> None:
