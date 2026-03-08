@@ -1,16 +1,29 @@
-# project_dashboard
+﻿# project_dashboard
 
-Streamlit을 이용해 프로젝트 결과, 데이터 분석 과정, 학습 내용을 정리하고 설명하는 저장소입니다.
+전처리된 재난 특보 이력과 대피소 데이터를 이용해 대피소 추천 흐름과 분석 구조를 함께 정리하는 Streamlit 프로젝트입니다.
 
-이 저장소의 목적은 화면 하나만 완성하는 것이 아니라, 내가 어떤 문제를 다뤘고 어떤 구조로 구현했고 어떻게 확장해 나가는지를 한 저장소 안에서 일관되게 보여주는 것입니다.
+현재 앱은 과거 전처리 데이터 기준으로 동작합니다. 유료 API, 유료 지도 API, 실시간 공공 API는 연결하지 않았고, 그 확장 위치만 코드와 문서에 남겨 두었습니다.
 
-## 이 저장소에서 볼 수 있는 것
+## 페이지 구성
 
-- `Home`: 저장소 목적, 현재 상태, 문서 읽는 순서
-- `About`: 이 저장소를 어떤 기준으로 운영하는지
-- `Projects`: 프로젝트 기록과 다음 확장 방향
-- `Data Analysis`: 샘플 데이터 기반 분석 화면과 구조 예시
-- `Learning Log`: 학습 주제, 로드맵, 운영 원칙
+- `Home`: 프로젝트 목적, 데이터 범위, 페이지 읽는 순서
+- `1 About`: 프로젝트 소개, 제약 사항, 다음 확장 계획
+- `2 대피소 추천`: 선택 지역과 좌표 기준 Top 3 대피소 추천
+- `3 작동 설명`: 추천 흐름과 데이터 계약 설명
+- `4 실시간 준비`: 미래 실시간 확장 포인트 정리
+- `5 Projects`: 현재 구현 작업 기록
+- `6 Data Analysis`: 과거 특보와 대피소 분포 분석
+- `7 Learning Log`: 학습 포인트와 확장 로드맵
+
+## 데이터 폴더
+
+앱은 기본적으로 `C:/Users/Admin/Desktop/preprocessing_data` 를 읽습니다.
+다른 위치를 쓰고 싶으면 아래 둘 중 하나를 설정하면 됩니다.
+
+1. 환경변수 `PREPROCESSING_DATA_DIR`
+2. `.streamlit/secrets.toml` 의 `preprocessing_data_dir`
+
+외부 CSV는 읽기 전용으로 사용하며 앱 코드에서 수정하지 않습니다.
 
 ## 실행 방법
 
@@ -20,21 +33,27 @@ uv sync --dev
 streamlit run app.py
 ```
 
+## 테스트
+
+```powershell
+.venv\Scripts\python.exe -m pytest
+```
+
 ## 문서
 
-- `docs/01_PROJECT_DIRECTION.md`: 이 저장소가 왜 존재하는지와 운영 기준
-- `docs/02_STRUCTURE_GUIDE.md`: 실제 파일과 폴더를 어떻게 이해하고 수정해야 하는지
-- `docs/03_STREAMLIT_LEARNING_GUIDE.md`: 이 저장소를 통해 배우는 Streamlit 개념과 실습 포인트
-- `docs/04_UPDATE_AND_EXPANSION_GUIDE.md`: 수정 절차와 확장 절차를 한 번에 보는 허브 문서
-- `docs/05_LIBRARY_GUIDE.md`: 현재 의존성과 사용 시점, 주의점
-- `docs/06_PROJECT_EXPLANATION_GUIDE.md`: 이 저장소로 내가 무엇을 했는지 설명하는 가이드
-- `docs/07_WORKING_CHECKLIST.md`: 수정 전과 커밋 전 빠르게 보는 점검 문서
-- `docs/08_CODEBASE_OVERVIEW.md`: 전체 코드 흐름과 데이터 흐름 해설
-- `docs/09_ENTRYPOINT_AND_CONFIG_GUIDE.md`: 진입점과 설정 파일 해설
-- `docs/10_CONTENT_AND_DATA_GUIDE.md`: 콘텐츠, 데이터, 포맷팅 코드 해설
-- `docs/11_COMPONENT_AND_PAGE_GUIDE.md`: 컴포넌트와 페이지 코드 해설
-- `docs/12_TEST_AND_VERIFICATION_GUIDE.md`: 테스트와 검증 흐름 해설
-- `docs/13_EXPORT_GUIDE.md`: Word/PPT/PDF로 옮길 때의 기준
-- `docs/14_CODING_AND_CLASS_GUIDELINES.md`: 코드 작성과 클래스 설계 주의사항
-- `docs/15_DATA_SOURCE_EXPANSION_GUIDE.md`: CSV, API, DB 확장 가이드
-- `docs/16_PAGE_AND_FEATURE_EXPANSION_GUIDE.md`: 페이지와 기능 확장 가이드
+- `docs/01_PROJECT_DIRECTION.md`: 프로젝트 목표와 개발 원칙
+- `docs/02_STRUCTURE_GUIDE.md`: 현재 폴더/파일 구조 설명
+- `docs/03_STREAMLIT_LEARNING_GUIDE.md`: 이 저장소를 통해 배우는 Streamlit 포인트
+- `docs/04_UPDATE_AND_EXPANSION_GUIDE.md`: 수정 및 확장 절차
+- `docs/05_LIBRARY_GUIDE.md`: 사용 라이브러리와 주의점
+- `docs/06_PROJECT_EXPLANATION_GUIDE.md`: 프로젝트 설명용 문장 가이드
+- `docs/07_WORKING_CHECKLIST.md`: 작업 전후 점검표
+- `docs/08_CODEBASE_OVERVIEW.md`: 전체 코드 흐름 설명
+- `docs/09_ENTRYPOINT_AND_CONFIG_GUIDE.md`: 진입점과 설정 파일 안내
+- `docs/10_CONTENT_AND_DATA_GUIDE.md`: 콘텐츠와 데이터 서비스 설명
+- `docs/11_COMPONENT_AND_PAGE_GUIDE.md`: 컴포넌트와 페이지 역할 정리
+- `docs/12_TEST_AND_VERIFICATION_GUIDE.md`: 테스트와 검증 방법
+- `docs/13_EXPORT_GUIDE.md`: 문서/발표 자료로 옮길 때의 기준
+- `docs/14_CODING_AND_CLASS_GUIDELINES.md`: 코드 작성과 책임 분리 원칙
+- `docs/15_DATA_SOURCE_EXPANSION_GUIDE.md`: 실시간 데이터 확장 가이드
+- `docs/16_PAGE_AND_FEATURE_EXPANSION_GUIDE.md`: 페이지와 기능 확장 기준

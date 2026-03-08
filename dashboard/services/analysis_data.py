@@ -1,138 +1,76 @@
-"""분석용 데이터 생성과 KPI 계산을 담당하는 서비스 모듈.
+"""과거 재난 이력 분석 화면용 데이터 준비 모듈.
 
-이 파일은 페이지 코드가 데이터 준비 로직까지 직접 들고 있지 않도록
-샘플 데이터 생성과 KPI 계산을 함수로 분리해 둔 곳이다.
-현재는 데모 데이터를 생성하지만, 나중에 CSV/API/DB를 연결하더라도
-가능하면 같은 함수 인터페이스를 유지하는 것이 목표다.
+왜 필요한가:
+- 추천 화면은 한 번의 선택 결과를 보여 주지만, 분석 화면은 전체 특보 흐름을 본다.
+- 이 모듈은 분석에 필요한 최소 컬럼과 KPI 계산만 따로 분리해 차트/홈 화면이 재사용하게 만든다.
 
-이 모듈을 참조하는 주요 파일:
-- ``app.py``: 홈 화면 KPI 요약
-- ``pages/3_Data_Analysis.py``: 필터 전 원본 데이터와 KPI 계산
-- ``tests/test_analysis_data.py``: 데이터 스키마와 KPI 동작 검증
+누가 사용하는가:
+- ``app.py`` 가 홈 KPI 를 만들 때 사용한다.
+- ``pages/6_Data_Analysis.py`` 가 분석용 DataFrame 과 KPI 를 읽는다.
 """
 
 from __future__ import annotations
 
-import numpy as np
+from pathlib import Path
+
 import pandas as pd
 
-# REQUIRED_COLUMNS는 이 저장소가 분석 데이터에 기대하는 기준 스키마다.
-# 데이터 소스를 교체하더라도 이 컬럼 집합을 유지하면 pages/3_Data_Analysis.py 와
-# tests/test_analysis_data.py 를 크게 바꾸지 않고 재사용할 수 있다.
-REQUIRED_COLUMNS = [
-    "period",
-    "project",
-    "category",
-    "owner",
-    "status",
-    "visitors",
-    "conversion_rate",
-    "satisfaction_score",
-    "impact_score",
-    "release_count",
-]
+from dashboard.services.disaster_data import (
+    DisasterDatasetBundle,
+    load_dataset_bundle,
+    load_dataset_bundle_uncached,
+)
+from dashboard.services.shelter_recommendation import classify_disaster_type
 
-# PROJECT_PROFILES는 데모 데이터에서 반복 생성할 프로젝트 기본 정보다.
-# 기간별로 각 프로젝트를 한 행씩 만들기 때문에 추이 차트와 표가 자연스럽게 연결된다.
-PROJECT_PROFILES = [
-    {"project": "Shelter Story", "category": "Civic Data", "owner": "Planning"},
-    {"project": "Learning Journal", "category": "Education", "owner": "Analysis"},
-    {"project": "Portfolio Board", "category": "Portfolio", "owner": "Product"},
-    {"project": "Operations Watch", "category": "Operations", "owner": "Research"},
-]
-
-# 상태값 목록은 charts.py 와 formatters.py 가 함께 참조하는 분석용 분류 기준이다.
-STATUSES = ["Healthy", "Watch", "Boost", "Needs Review"]
+ANALYSIS_COLUMNS = ["발표시간", "지역", "시군구", "재난종류", "재난그룹", "특보등급"]
+# 분석 페이지와 홈 KPI 가 동시에 기대하는 최소 열 집합이라
+# 차트 함수와 카드 계산은 이 컬럼 순서를 공통 계약으로 본다.
 
 
-def load_demo_dataset(seed: int = 42) -> pd.DataFrame:
-    """학습과 화면 검증에 사용할 데모 데이터프레임을 생성한다.
+def load_analysis_dataset(data_dir: str | Path | None = None) -> pd.DataFrame:
+    """분석 페이지가 공통으로 사용할 특보 이력 DataFrame 을 반환한다.
 
-    Args:
-        seed: 난수 시드 값.
-            같은 시드를 쓰면 항상 같은 데이터가 생성되어 테스트와 화면 검증이 쉬워진다.
-
-    Returns:
-        ``REQUIRED_COLUMNS`` 순서를 갖는 정렬된 pandas DataFrame.
-
-    이 함수를 따로 둔 이유:
-    - 페이지 파일에서 난수 생성과 컬럼 조립 코드를 제거하기 위해
-    - 이후 CSV/API/DB 소스로 교체할 때 같은 호출 지점을 유지하기 위해
+    분석 차트가 같은 열 집합을 공유해야 하므로, 여기서 필요한 컬럼만 남긴다.
     """
-    # 랜덤 생성기를 함수 안에서 만들면 테스트가 시드별로 재현 가능하다.
-    rng = np.random.default_rng(seed)
 
-    # 주차 단위 기간을 만들어 추이 차트가 의미 있게 보이도록 한다.
-    periods = pd.date_range("2025-09-01", periods=16, freq="W-MON")
-    records: list[dict[str, object]] = []
+    bundle: DisasterDatasetBundle
+    if data_dir is None:
+        # 일반 앱 실행에서는 Streamlit 캐시를 쓰는 기본 로더를 사용해 반복 rerun 비용을 줄인다.
+        bundle = load_dataset_bundle()
+    else:
+        # 테스트나 명시적 경로 검증에서는 override 경로를 그대로 읽는 uncached 버전을 사용한다.
+        bundle = load_dataset_bundle_uncached(data_dir)
 
-    for period in periods:
-        for profile in PROJECT_PROFILES:
-            # 한 기간에 한 프로젝트당 한 행을 만들면
-            # 차트와 표가 "기간 x 프로젝트" 구조로 깔끔하게 맞아 떨어진다.
-            visitors = int(rng.integers(800, 4600))
-            conversion_rate = round(float(rng.uniform(0.022, 0.108)), 4)
-            satisfaction_score = round(float(rng.uniform(72.0, 96.0)), 1)
-            impact_score = round(float(rng.uniform(61.0, 95.0)), 1)
-            release_count = int(rng.integers(1, 5))
-
-            # 상태값은 균등 분포보다 현실적인 편차를 보기 위해 가중치를 둔다.
-            status = str(rng.choice(STATUSES, p=[0.42, 0.28, 0.2, 0.1]))
-
-            # records는 이후 DataFrame으로 변환되므로
-            # dict 키 이름을 REQUIRED_COLUMNS와 같은 기준으로 유지한다.
-            records.append(
-                {
-                    "period": period,
-                    "project": profile["project"],
-                    "category": profile["category"],
-                    "owner": profile["owner"],
-                    "status": status,
-                    "visitors": visitors,
-                    "conversion_rate": conversion_rate,
-                    "satisfaction_score": satisfaction_score,
-                    "impact_score": impact_score,
-                    "release_count": release_count,
-                }
-            )
-
-    # 컬럼 순서를 고정해서 생성하면 테스트와 화면 코드가 같은 스키마를 기대할 수 있다.
-    dataframe = pd.DataFrame.from_records(records, columns=REQUIRED_COLUMNS)
-
-    # 정렬과 인덱스 초기화를 미리 해 두면 페이지 파일은 표시와 필터링에 집중할 수 있다.
-    return dataframe.sort_values(["period", "project"]).reset_index(drop=True)
+    # 추천 서비스와 분석 화면이 같은 재난 그룹 체계를 쓰도록 정규화 결과를 추가한다.
+    analysis_frame = bundle.alerts.copy()
+    # 추천 서비스와 같은 분류 함수를 재사용하는 이유는
+    # 추천 페이지의 재난 그룹 이름과 분석 차트 범례가 서로 다르게 보이지 않게 하기 위해서다.
+    analysis_frame["재난그룹"] = analysis_frame["재난종류"].map(classify_disaster_type)
+    return analysis_frame[ANALYSIS_COLUMNS].sort_values("발표시간").reset_index(drop=True)
 
 
 def build_kpis(dataframe: pd.DataFrame) -> dict[str, object]:
-    """분석 화면과 홈 화면에 필요한 핵심 지표를 계산한다.
+    """분석 화면과 홈 화면에 필요한 기본 KPI 를 계산한다.
 
-    Args:
-        dataframe: 원본 또는 필터링된 분석 데이터프레임.
-
-    Returns:
-        KPI 카드에 바로 쓸 수 있는 딕셔너리.
-        키 이름은 홈 화면과 분석 페이지가 함께 사용한다.
-
-    주의점:
-    - 필터 결과가 비었을 때도 같은 키 구조를 반환해야 페이지가 깨지지 않는다.
-    - 화면 파일에서 직접 평균과 개수를 계산하지 않고 이 함수로 모아 두면
-      계산 기준이 바뀌어도 수정 지점을 줄일 수 있다.
+    홈 카드와 분석 카드가 같은 숫자를 보여 주도록 한 곳에서 계산한다.
     """
-    # 빈 데이터도 같은 형태의 응답을 반환해야
-    # Streamlit 페이지가 조건문 없이 안전하게 다룰 수 있다.
+
     if dataframe.empty:
+        # 빈 경우에도 같은 키 구조를 반환해야 홈/분석 페이지 metric 코드가 조건문 없이 재사용된다.
         return {
-            "record_count": 0,
-            "project_count": 0,
-            "avg_conversion_rate": 0.0,
-            "avg_impact_score": 0.0,
+            "alert_count": 0,
+            "disaster_count": 0,
+            "region_count": 0,
+            "warning_count": 0,
             "latest_period": None,
         }
 
+    # 카드 UI 가 바로 읽기 쉬운 단순 dict 형태로 반환한다.
+    # 별도 객체 대신 dict 를 쓰는 이유는 metric 카드에서 필요한 값이 고정적이고 얕기 때문이다.
     return {
-        "record_count": int(len(dataframe)),
-        "project_count": int(dataframe["project"].nunique()),
-        "avg_conversion_rate": round(float(dataframe["conversion_rate"].mean()), 4),
-        "avg_impact_score": round(float(dataframe["impact_score"].mean()), 1),
-        "latest_period": pd.Timestamp(dataframe["period"].max()),
+        "alert_count": int(len(dataframe)),
+        "disaster_count": int(dataframe["재난그룹"].nunique()),
+        "region_count": int(dataframe["지역"].nunique()),
+        "warning_count": int((dataframe["특보등급"] == "경보").sum()),
+        "latest_period": pd.Timestamp(dataframe["발표시간"].max()),
     }

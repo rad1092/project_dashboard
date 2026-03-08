@@ -1,136 +1,46 @@
-# 컴포넌트와 페이지 가이드
+﻿# 컴포넌트와 페이지 가이드
 
-## 설명 대상 파일
+## 컴포넌트
 
-- `dashboard/components/layout.py`
-- `dashboard/components/charts.py`
-- `pages/1_About.py`
-- `pages/2_Projects.py`
-- `pages/3_Data_Analysis.py`
-- `pages/4_Learning_Log.py`
+- `dashboard/components/layout.py`: 공통 제목, 칩, 리스트 블록
+- `dashboard/components/disaster_sections.py`: 추천 카드, 흐름 카드, 데이터셋 카드
+- `dashboard/components/disaster_map.py`: 무료 OSM 지도와 직선 거리선
+- `dashboard/components/charts.py`: 분석 페이지용 Plotly 차트
 
-## `dashboard/components/layout.py`
+## 페이지
 
-### 왜 있는가
+### `1 About`
+프로젝트 소개와 한계를 설명하는 페이지다.
 
-반복되는 페이지 헤더, 칩 목록, 박스형 목록 UI를 한 곳에 모아 재사용하기 위해 있다.
+### `2 대피소 추천`
+현재 핵심 사용자 페이지다.
+이 페이지는 위도/경도를 먼저 받고, 통합 대피소 기준 가장 가까운 지역 중심을 찾아 시도/시군구를 자동 감지한다.
+이후 감지된 지역으로 최근 특보 요약, 기본 재난 선택, 추천 후보 필터를 함께 계산한다.
 
-### 현재 코드 예시
+중요한 제약도 있다.
 
-```python
-def render_page_intro(title: str, subtitle: str, caption: str | None = None) -> None:
-    st.title(title)
-    st.write(subtitle)
-    if caption:
-        st.caption(caption)
-```
+- 현재 지역 감지는 행정경계 기반이 아니다.
+- 외부 지도 API 없이 동작해야 하므로 로컬 근접 추정 방식이다.
+- 따라서 감지 결과가 애매할 때를 대비해 `지역 직접 수정` UI 를 남겨 둔다.
 
-### 수정 예시
+### `3 작동 설명`
+추천 흐름과 데이터셋 역할을 설명하는 페이지다.
 
-- 모든 페이지의 소개 헤더 형식을 바꾸고 싶으면 이 함수부터 수정한다.
+### `4 실시간 준비`
+실시간 기능을 나중에 어디에 붙일지 정리한 준비 페이지다.
 
-### 주의점
+### `5 Projects`
+현재 구현 작업을 카드 형태로 기록한다.
 
-- 표현 함수 안에 데이터 조회나 API 요청을 넣지 않는다.
+### `6 Data Analysis`
+과거 특보와 대피소 분포를 분석하는 보조 페이지다.
 
-## `dashboard/components/charts.py`
+### `7 Learning Log`
+학습 포인트와 확장 로드맵을 정리한다.
 
-### 왜 있는가
+## 주의점
 
-차트 로직을 페이지 파일 밖으로 빼서 재사용하기 위해 있다.
-
-### 현재 코드 예시
-
-```python
-def build_trend_chart(dataframe: pd.DataFrame) -> go.Figure:
-    ...
-```
-
-### 수정 예시
-
-- 새 차트를 추가할 때는 이 파일에 함수로 만들고, 페이지에서는 호출만 하게 한다.
-
-### 주의점
-
-- 페이지에서 직접 groupby와 차트 생성을 반복하지 않는다.
-- 특정 페이지 전용 처리로 차트 함수를 너무 복잡하게 만들지 않는다.
-
-## `pages/1_About.py`
-
-### 왜 있는가
-
-이 저장소를 어떤 기준으로 운영하는지 보여주는 소개 페이지다.
-
-### 언제 수정하는가
-
-- 소개 문구
-- 기술 스택
-- 운영 원칙
-
-### 주의점
-
-- README와 다른 정체성을 말하지 않게 한다.
-
-## `pages/2_Projects.py`
-
-### 왜 있는가
-
-현재 정리 중인 작업을 카드 형태로 기록하는 페이지다.
-
-### 언제 수정하는가
-
-- 프로젝트 카드 내용
-- 카드 표시 형식
-
-### 주의점
-
-- 카드가 예쁜 것보다 문제, 역할, 결과, 다음 액션이 분명해야 한다.
-
-## `pages/3_Data_Analysis.py`
-
-### 왜 있는가
-
-현재 구조에서 가장 중요한 분석 화면 예시를 보여준다.
-
-### 현재 코드 예시
-
-```python
-filtered = dataframe[
-    dataframe["project"].isin(selected_projects)
-    & dataframe["category"].isin(selected_categories)
-    & dataframe["status"].isin(selected_statuses)
-].copy()
-```
-
-### 수정 예시
-
-- 새 필터를 추가하고 싶다면 먼저 어떤 컬럼이 필요한지 `analysis_data.py`에서 확인한다.
-- 새 차트를 추가하고 싶다면 `charts.py`에 함수를 만들고 여기서는 호출만 한다.
-
-### 주의점
-
-- 페이지에서 직접 API를 반복 호출하지 않는다.
-- 필터와 KPI, 차트 계산을 한 파일에 계속 쌓으면 금방 복잡해진다.
-- rerun마다 무거운 계산을 여러 번 하지 않도록 구조를 본다.
-
-## `pages/4_Learning_Log.py`
-
-### 왜 있는가
-
-이 저장소를 통해 배우는 것과 확장 순서를 정리하는 페이지다.
-
-### 언제 수정하는가
-
-- 학습 주제
-- 로드맵
-- 운영 규칙
-
-### 주의점
-
-- 과거 회고만 적지 말고 현재 구조 기준으로 유지한다.
-
-## 잘못 수정하면 생길 문제
-
-- 공통 UI를 페이지마다 복붙하면 유지보수가 힘들어진다.
-- 분석 페이지에서 직접 서비스 역할까지 떠안으면 확장 문서와 코드가 같이 무너진다.
-- 상태관리를 필요 이상으로 넣으면 Streamlit 흐름을 이해하기 어려워진다.
+- 페이지에서 직접 CSV 구조를 정리하거나 추천 규칙을 하드코딩하지 않는다.
+- 반복되는 카드/지도/차트 UI 는 컴포넌트로 분리한다.
+- 추천 페이지의 `활성 지역` 은 감지 지역과 보정 지역 중 하나로 결정되며,
+  특보 요약과 추천 후보 필터는 항상 같은 활성 지역을 공유해야 한다.

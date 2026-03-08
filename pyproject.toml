@@ -1,7 +1,7 @@
 [project]
 name = "project_dashboard"
 version = "0.1.0"
-description = "Streamlit workspace for documenting projects, analysis, and learning"
+description = "Streamlit disaster shelter recommendation and analysis workspace"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

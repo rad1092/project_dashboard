@@ -1,13 +1,11 @@
 """반복되는 Streamlit 레이아웃 패턴을 모아 둔 UI 헬퍼 모듈.
 
-페이지 파일에서 제목 블록, 칩 목록, 테두리 카드 목록을 반복 작성하면
-코드가 길어지고 페이지마다 표현이 조금씩 달라지기 쉽다.
-이 파일은 그런 반복 UI를 함수로 묶어 각 페이지가 내용 조합에 집중하게 한다.
+왜 필요한가:
+- 페이지마다 제목, 칩, 테두리 박스 코드를 반복하면 화면 톤은 비슷한데 수정 지점이 흩어진다.
+- 이 모듈은 자주 쓰는 레이아웃 패턴을 작게 감싸 페이지 코드가 내용 흐름에 집중하게 만든다.
 
-주요 호출 위치:
-- ``pages/1_About.py``
-- ``pages/2_Projects.py``
-- ``pages/4_Learning_Log.py``
+누가 사용하는가:
+- ``pages/*.py`` 전반이 공통 소개 블록과 테두리 섹션을 이 모듈로 렌더링한다.
 """
 
 from __future__ import annotations
@@ -18,11 +16,11 @@ import streamlit as st
 def render_page_intro(title: str, subtitle: str, caption: str | None = None) -> None:
     """페이지 상단의 공통 제목 블록을 그린다.
 
-    Args:
-        title: 페이지 제목.
-        subtitle: 제목 바로 아래에 들어갈 설명 문장.
-        caption: 필요할 때만 추가하는 보조 설명.
+    제목/부제/캡션 순서를 고정해 두면 페이지를 넘겨도 사용자가 같은 읽기 흐름을 느낄 수 있다.
     """
+
+    # 모든 페이지의 첫 인상을 같은 구조로 맞춰 두면,
+    # 사용자는 페이지마다 읽는 방법을 다시 학습하지 않아도 된다.
     st.title(title)
     st.write(subtitle)
     if caption:
@@ -30,10 +28,13 @@ def render_page_intro(title: str, subtitle: str, caption: str | None = None) -> 
 
 
 def render_chip_list(items: list[str]) -> None:
-    """기술 스택 같은 짧은 항목 목록을 칩 형태의 마크다운으로 출력한다.
+    """기술 스택 같은 짧은 항목 목록을 칩 형태로 출력한다.
 
-    About 페이지에서 기술 스택을 가볍게 보여줄 때 사용한다.
+    긴 설명보다 간단한 키워드 나열이 적합한 영역을 위해 별도 함수로 분리한다.
     """
+
+    # 이 함수는 별도 박스를 만들지 않고 한 줄에 묶어,
+    # 스택/태그 같은 짧은 정보가 화면 설명을 밀어내지 않게 한다.
     chips = " ".join(f"`{item}`" for item in items)
     st.markdown(chips)
 
@@ -41,9 +42,12 @@ def render_chip_list(items: list[str]) -> None:
 def render_bordered_points(title: str, items: list[str]) -> None:
     """제목과 글머리표 목록이 들어간 테두리 컨테이너를 렌더링한다.
 
-    같은 카드 구조를 여러 페이지에서 재사용할 수 있게 묶어 둔 함수다.
+    여러 페이지가 같은 정보 밀도를 유지하도록 "제목 + 불릿 목록" 패턴을 재사용한다.
     """
+
     with st.container(border=True):
         st.subheader(title)
+        # 동일한 시각 구조를 유지하면 About, 설명, 학습 로그 페이지가 달라도
+        # "요약 정보 블록"이라는 역할을 공통적으로 인식할 수 있다.
         for item in items:
             st.markdown(f"- {item}")
