@@ -8,6 +8,9 @@ htmlcov/
 dist/
 build/
 *.pyc
+.env
+.env.*
+*.env
 
 # Keep only the runtime-ready CSV dataset in version control.
 preprocessing_data/*
