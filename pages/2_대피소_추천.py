@@ -123,10 +123,12 @@ if st.session_state["manual_sido"] not in sidos:
 
 with st.sidebar.expander("지역 직접 수정", expanded=st.session_state["use_manual_region"]):
     # 자동 감지 기반으로 충분하지 않을 때만 사용자가 시도/시군구를 직접 보정하게 만든다.
+    # expanded=... 는 이 접힘 영역을 처음부터 펼칠지 닫아 둘지를 현재 세션 상태에 맞춰 정한다.
     st.checkbox("감지 지역 대신 직접 수정", key="use_manual_region")
     st.selectbox("시도", options=sidos, key="manual_sido")
 
     manual_sigungu_options = get_sigungu_options(bundle, st.session_state["manual_sido"])
+    # session_state.get(...) 을 쓰면 값이 아직 없는 첫 실행에서도 KeyError 없이 비교할 수 있다.
     if st.session_state.get("manual_sigungu") not in manual_sigungu_options:
         # 상위 시도 변경 뒤에도 이전 시군구가 남아 있으면 잘못된 조합이 되므로 현재 시도 기준 첫 옵션으로 맞춘다.
         st.session_state["manual_sigungu"] = manual_sigungu_options[0]
@@ -193,6 +195,7 @@ metric_columns[1].metric("최근 특보 시각", format_datetime(alert_summary["
 metric_columns[2].metric("최근 확인 특보 수", format_number(alert_summary["alert_count"]))
 metric_columns[3].metric("추천 후보 수", format_number(len(recommendations)))
 
+# 비율 리스트 [1.1, 0.9] 는 왼쪽 요약 칸을 오른쪽 지도 칸보다 조금 더 넓게 배치하겠다는 뜻이다.
 top_left, top_right = st.columns([1.1, 0.9], gap="large")
 
 with top_left:

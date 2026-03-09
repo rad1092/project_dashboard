@@ -49,6 +49,7 @@ def build_recommendation_map(
     """
 
     map_object = folium.Map(
+        # folium 은 좌표를 [위도, 경도] 순서의 리스트로 받기 때문에 이 순서를 바꾸면 지도가 엉뚱한 곳으로 간다.
         location=[user_latitude, user_longitude],
         zoom_start=11,
         tiles="OpenStreetMap",
@@ -85,7 +86,8 @@ def build_recommendation_map(
             fill=True,
             fill_color=color,
             fill_opacity=0.9,
-            tooltip=f"{row['대피소명']} ({row['추천구분']})",
+            # tooltip 은 마우스를 올렸을 때 잠깐 뜨는 설명 상자다.
+        tooltip=f"{row['대피소명']} ({row['추천구분']})",
         ).add_to(map_object)
 
         # 선은 실제 경로가 아니라 추천 기준이 되는 직선 거리 관계를 보여 주는 설명선이다.
@@ -101,6 +103,7 @@ def build_recommendation_map(
 
     if len(bounds) > 1:
         # 추천 후보가 하나라도 있으면 사용자와 대피소가 모두 보이도록 자동 줌 범위를 다시 계산한다.
+        # padding=(30, 30) 은 가장자리 여백을 조금 남겨 마커가 화면 끝에 딱 붙지 않게 만든다.
         map_object.fit_bounds(bounds, padding=(30, 30))
 
     return map_object

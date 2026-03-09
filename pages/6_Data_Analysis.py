@@ -50,6 +50,7 @@ groups = sorted(dataframe["재난그룹"].dropna().unique().tolist())
 grades = sorted(dataframe["특보등급"].dropna().unique().tolist())
 # unique().tolist() 는 DataFrame 열에서 중복 없는 선택지 목록을 만드는 전형적인 pandas 패턴이다.
 
+# multiselect(..., default=sidos) 처럼 default 에 같은 목록을 주면 첫 진입 시 "전체 선택" 상태로 시작한다.
 selected_sidos = st.sidebar.multiselect("시도", options=sidos, default=sidos)
 selected_groups = st.sidebar.multiselect("재난 그룹", options=groups, default=groups)
 selected_grades = st.sidebar.multiselect("특보 등급", options=grades, default=grades)
@@ -77,6 +78,7 @@ else:
     regional_shelters = bundle.shelters[bundle.shelters["시도"].isin(selected_sidos)]
     # 특보 필터에서 고른 시도 범위와 대피소 분포 차트가 같은 지역 집합을 바라보게 맞춰 준다.
 
+    # 차트도 좌우 두 칸으로 나눠 "흐름/규모"와 "비중/구성"을 병렬 비교하게 만든다.
     chart_left, chart_right = st.columns(2, gap="large")
     with chart_left:
         # 왼쪽은 시간/지역처럼 "흐름과 규모"를 읽는 차트를 배치한다.

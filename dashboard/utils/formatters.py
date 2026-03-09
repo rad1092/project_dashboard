@@ -64,6 +64,7 @@ def format_datetime(value: pd.Timestamp | None) -> str:
     """
 
     if value is None or pd.isna(value):
+        # pd.isna(value) 는 pandas 기준으로 이 값이 결측인지 확인하는 함수라 None, NaN 같은 경우를 함께 잡는다.
         return "-"
     # pd.Timestamp 로 한 번 감싸 두면 datetime, str, Timestamp 가 섞여 들어와도 같은 출력 형식을 유지한다.
     # strftime() 은 날짜/시간 객체를 원하는 문자열 모양으로 바꾸는 표준 메서드다.
@@ -77,4 +78,5 @@ def label_status(status: str) -> str:
     """
 
     # 매핑되지 않은 값은 원문 그대로 돌려 보내 새 상태 코드가 들어와도 화면이 즉시 깨지지 않게 한다.
+    # dict.get(status, status) 는 사전에 값이 있으면 번역 라벨을, 없으면 원래 문자열을 돌려주는 fallback 패턴이다.
     return STATUS_LABELS.get(status, status)

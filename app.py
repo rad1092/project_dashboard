@@ -42,6 +42,7 @@ apply_page_config("home")
 
 # PAGE_META 에 적어 둔 label 을 그대로 재사용하는 이유는
 # 홈 문구와 실제 페이지 제목 체계가 서로 엇갈리지 않게 하기 위해서다.
+# st.title() 은 가장 큰 제목, st.write() 는 기본 본문, st.caption() 은 옅은 보조 문장을 그리는 함수다.
 st.title(PAGE_META["home"]["label"])
 st.write(
     "이 앱은 전처리된 재난 특보 이력과 대피소 좌표 데이터를 이용해 "
@@ -66,6 +67,7 @@ except FileNotFoundError as exc:
         "다른 위치의 데이터를 쓰려면 `.streamlit/secrets.toml` 또는 "
         "`PREPROCESSING_DATA_DIR` 환경변수로 경로를 덮어쓰면 된다."
     )
+    # st.stop() 은 여기서 스크립트 실행을 멈춰, 아래 KPI/카드 코드가 없는 데이터를 읽다 다시 깨지지 않게 만든다.
     st.stop()
 
 # 홈 KPI 는 사용자가 지금 연결된 데이터 규모를 첫 화면에서 바로 파악하게 하는 요약 영역이다.
@@ -86,6 +88,7 @@ metric_columns[3].metric("최근 특보 시각", format_datetime(kpis["latest_pe
 st.divider()
 
 # 왼쪽은 "무엇을 볼 수 있는가", 오른쪽은 "어떤 데이터와 한계 위에서 움직이는가"를 나눠 보여 준다.
+# st.columns([1.05, 0.95]) 는 화면을 두 칸으로 나누되, 왼쪽 칸을 아주 조금 더 넓게 쓰겠다는 뜻이다.
 left, right = st.columns([1.05, 0.95], gap="large")
 
 with left:

@@ -29,8 +29,10 @@ render_page_intro(
 # PROJECT_ITEMS 는 content.py 의 고정 키 계약을 따르므로,
 # 이 페이지는 데이터를 가공하기보다 어떤 순서와 강조로 보여 줄지에 집중한다.
 for item in PROJECT_ITEMS:
+    # PROJECT_ITEMS 는 dict 목록이라 for 문을 돌 때마다 카드 하나에 들어갈 데이터 묶음이 item 으로 들어온다.
     with st.container(border=True):
         # 카드 하나가 "무엇을 하는 기능인지"와 "다음에 무엇을 할지"를 같이 보여 준다.
+        # 오른쪽 상태 칸은 짧은 상태 라벨만 담으므로 폭을 0.25 로 더 좁게 둔다.
         top_left, top_right = st.columns([0.75, 0.25])
         with top_left:
             st.subheader(item["title"])

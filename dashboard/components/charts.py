@@ -51,6 +51,7 @@ def build_alert_trend_chart(dataframe: pd.DataFrame) -> go.Figure:
         .size()
         .rename(columns={"size": "건수"})
     )
+    # rename(columns={"size": "건수"}) 는 집계로 자동 생성된 size 열 이름을 화면용 한글 라벨로 바꾸는 단계다.
     # assign() 은 원본 dataframe 을 직접 바꾸지 않고, 차트 계산용 임시 열을 붙이는 pandas 패턴이다.
     # 발표시간 전체 대신 발표일 문자열로 묶는 이유는
     # 홈/분석 단계에서는 세부 시각보다 날짜 단위 흐름이 더 읽기 쉽기 때문이다.
@@ -90,6 +91,7 @@ def build_region_alert_chart(dataframe: pd.DataFrame) -> go.Figure:
     # sort_values() 를 먼저 해 두면 Plotly 가 막대를 그릴 때도 많은 지역부터 차례로 읽기 쉬워진다.
     # 건수 내림차순 정렬을 먼저 하는 이유는 막대 차트가 많은 지역부터 읽히는 편이 비교가 빠르기 때문이다.
 
+    # text_auto=True 는 막대 끝에 숫자를 자동으로 적어 주는 Plotly 옵션이라 값을 눈으로 바로 읽기 쉽다.
     figure = px.bar(
         summary,
         x="지역",
@@ -125,6 +127,7 @@ def build_hazard_share_chart(dataframe: pd.DataFrame) -> go.Figure:
     # 재난그룹이 아니라 재난종류를 그대로 쓰는 이유는
     # 도넛 차트가 원본 특보 비중을 보여 주는 보조 설명 역할이기 때문이다.
 
+    # hole=0.55 는 가운데를 비워 도넛 차트 모양으로 만들겠다는 옵션이다.
     figure = px.pie(
         summary,
         names="재난종류",
@@ -160,6 +163,7 @@ def build_shelter_type_chart(dataframe: pd.DataFrame) -> go.Figure:
     # fillna("미분류") 를 미리 하는 이유는 집계 전에 결측을 정리해 두어
     # Plotly 범례와 막대 축에서 빈 문자열/NaN 이 따로 보이는 일을 막기 위해서다.
 
+    # text_auto=True 는 막대 끝에 숫자를 자동으로 적어 주는 Plotly 옵션이라 값을 눈으로 바로 읽기 쉽다.
     figure = px.bar(
         summary,
         x="대피소유형",

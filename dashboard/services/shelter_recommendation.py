@@ -334,6 +334,8 @@ def recommend_shelters(
         )
 
     if not scored_frames:
+        # columns=... 만 넘긴 빈 DataFrame 은 "행은 없어도 결과 표 구조는 유지한다"는 뜻이라
+        # 페이지가 빈 상태에서도 같은 컬럼 이름으로 안전하게 렌더링할 수 있다.
         return pd.DataFrame(columns=RECOMMENDATION_RESULT_COLUMNS)
 
     # concat() 은 전용 후보와 fallback 후보를 하나의 긴 표로 합치는 pandas 기본 함수다.
@@ -343,6 +345,8 @@ def recommend_shelters(
 
     # 추천구분 우선순위를 숫자로 바꿔 두면 카드와 표가 같은 정렬 결과를 공유할 수 있다.
     priority_order = {"전용 대피소": 0, "기본 대피소": 1, "대체 대피소": 2}
+    # map(priority_order) 는 추천구분 라벨을 정렬용 숫자로 바꾸고,
+    # fillna(9) 는 예상 밖 라벨이 들어와도 맨 뒤로 밀어 두는 안전장치다.
     combined["추천우선순위"] = combined["추천구분"].map(priority_order).fillna(9)
     combined = combined.sort_values(
         ["추천우선순위", "거리_km", "수용인원_정렬값"],

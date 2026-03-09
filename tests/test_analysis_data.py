@@ -23,6 +23,7 @@ def test_load_analysis_dataset_has_expected_columns(sample_preprocessing_dir) ->
     # list(dataframe.columns) 처럼 리스트로 바꿔 비교하면 열 순서까지 함께 검증할 수 있다.
     assert list(dataframe.columns) == ANALYSIS_COLUMNS
     assert len(dataframe) == 3
+    # isin(...).all() 은 모든 행이 허용된 재난 그룹 집합 안에 들어 있는지 한 번에 확인하는 패턴이다.
     assert dataframe["재난그룹"].isin({"강풍/풍랑", "호우/태풍", "폭염"}).all()
 
 
@@ -38,6 +39,7 @@ def test_build_kpis_returns_summary_values(sample_preprocessing_dir) -> None:
     assert summary["disaster_count"] == 3
     assert summary["region_count"] == 2
     assert summary["warning_count"] == 1
+    # isinstance(...) 는 값이 날짜 비슷한 문자열이 아니라 실제 Timestamp 객체인지까지 확인한다.
     assert isinstance(summary["latest_period"], pd.Timestamp)
 
 

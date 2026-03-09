@@ -31,6 +31,7 @@ APP_ICON = "🛟"
 # 페이지 메타데이터는 홈 안내 문구와 각 페이지의 제목 규칙을 동시에 맞추는 기준표다.
 # label 은 사용자에게 보이는 제목이고, summary 는 홈/문서에서 페이지 역할을 짧게 설명할 때 재사용된다.
 # 즉, PAGE_META 는 "사이드바 라벨", "홈 설명", "문서 설명"이 같은 말을 쓰게 만드는 단일 원본이다.
+# 딕셔너리 안에 다시 딕셔너리를 넣은 구조라, `PAGE_META["about"]["label"]` 처럼 두 단계로 값을 꺼내 쓴다.
 PAGE_META = {
     "home": {
         "label": "재난 대피소 추천 프로젝트 홈",
@@ -77,8 +78,10 @@ def apply_page_config(page_key: str) -> None:
     # page_key 로 직접 텍스트를 조합하지 않고 PAGE_META 를 거치는 이유는
     # 한 번 정한 번호 체계와 페이지 요약을 앱 전체에서 같은 기준으로 쓰기 위해서다.
     # 예를 들어 "2 대피소 추천" 이라는 문구를 홈, 문서, 브라우저 탭이 모두 똑같이 보게 된다.
+    # `PAGE_META[page_key]` 는 현재 페이지 키에 맞는 설정 묶음을 꺼내 오는 딕셔너리 조회다.
     page = PAGE_META[page_key]
     st.set_page_config(
+        # f"..." 는 변수 값을 문자열 안에 바로 끼워 넣는 Python f-string 문법이다.
         page_title=f"{APP_TITLE} | {page['label']}",
         page_icon=APP_ICON,
         # wide 레이아웃을 고정하는 이유는 추천 카드, 지도, 분석 차트가 한 줄에 함께 보이도록 하기 위해서다.

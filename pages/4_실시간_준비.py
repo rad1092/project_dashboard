@@ -40,6 +40,7 @@ st.info(
 )
 
 for item in REALTIME_EXPANSION_ITEMS:
+    # item 은 content.py 의 dict 한 개라 item["title"], item["summary"] 처럼 키 이름으로 값을 읽는다.
     with st.container(border=True):
         st.subheader(item["title"])
         st.write(item["summary"])
@@ -47,6 +48,7 @@ for item in REALTIME_EXPANSION_ITEMS:
         # item 은 content.py 의 dict 데이터이므로 키 이름이 바뀌면 이 페이지도 함께 수정돼야 한다.
         st.markdown(f"**지금 막아 둔 이유**: {item['why_blocked']}")
 
+# st.columns(2) 는 같은 너비의 칸 두 개를 만들겠다는 뜻이라, 왼쪽은 위치/특보 스텁, 오른쪽은 경로/체크리스트를 나눠 담는다.
 left, right = st.columns(2, gap="large")
 
 with left:

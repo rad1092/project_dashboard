@@ -35,6 +35,7 @@ render_page_intro(
 )
 
 # 왼쪽은 프로젝트 의미 설명, 오른쪽은 기술 스택과 한계처럼 보조 정보를 배치한다.
+# columns([1.1, 0.9]) 는 설명이 많은 왼쪽 칸을 조금 더 넓게 쓰겠다는 비율 설정이다.
 left, right = st.columns([1.1, 0.9], gap="large")
 
 with left:
@@ -71,6 +72,7 @@ try:
 except FileNotFoundError as exc:
     st.warning(str(exc))
 else:
+    # try 블록이 예외 없이 끝났을 때만 else 블록이 실행되므로, 아래 카탈로그 출력은 데이터 로딩 성공 시에만 나타난다.
     with st.container(border=True):
         st.subheader("현재 연결된 전처리 데이터")
         # 소개 페이지에서도 실제 데이터 행 수를 보여 주면

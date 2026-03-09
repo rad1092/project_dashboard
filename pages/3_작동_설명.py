@@ -33,6 +33,7 @@ try:
     bundle = load_dataset_bundle()
 except FileNotFoundError as exc:
     st.error(str(exc))
+    # st.stop() 으로 여기서 멈추면, 아래 데이터셋 카드 렌더링이 없는 bundle 을 읽다 추가로 깨지지 않는다.
     st.stop()
 
 # catalog 는 CSV 원본 역할을 설명 카드로 바꾸기 위한 중간 데이터다.
@@ -47,6 +48,7 @@ with st.container(border=True):
 
 st.divider()
 
+# columns([0.95, 1.05]) 는 오른쪽 코드 스텁 영역을 조금 더 넓게 주어 긴 코드 문자열이 덜 줄바꿈되게 만든다.
 left, right = st.columns([0.95, 1.05], gap="large")
 
 with left:

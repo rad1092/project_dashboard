@@ -53,6 +53,8 @@ def load_analysis_dataset(data_dir: str | Path | None = None) -> pd.DataFrame:
     # 추천 페이지의 재난 그룹 이름과 분석 차트 범례가 서로 다르게 보이지 않게 하기 위해서다.
     analysis_frame["재난그룹"] = analysis_frame["재난종류"].map(classify_disaster_type)
     # 필요한 열만 마지막에 잘라 두면 차트 함수와 KPI 계산이 같은 최소 계약을 공유하기 쉬워진다.
+    # reset_index(drop=True) 는 정렬 전 행 번호를 버리고 0부터 다시 매겨,
+    # 표나 차트를 확인할 때 예전 인덱스가 남아 혼란을 주지 않게 만든다.
     return analysis_frame[ANALYSIS_COLUMNS].sort_values("발표시간").reset_index(drop=True)
 
 
@@ -80,5 +82,7 @@ def build_kpis(dataframe: pd.DataFrame) -> dict[str, object]:
         "disaster_count": int(dataframe["재난그룹"].nunique()),
         "region_count": int(dataframe["지역"].nunique()),
         "warning_count": int((dataframe["특보등급"] == "경보").sum()),
+        # max() 는 발표시간 열에서 가장 최근 시각 하나를 고르고,
+        # pd.Timestamp() 는 그 값을 pandas 시간 타입으로 맞춰 이후 포맷팅 코드와 계약을 맞춘다.
         "latest_period": pd.Timestamp(dataframe["발표시간"].max()),
     }

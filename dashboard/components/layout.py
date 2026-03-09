@@ -28,6 +28,7 @@ def render_page_intro(title: str, subtitle: str, caption: str | None = None) -> 
     # title, subtitle, caption 을 함수 인자로 받는 이유는 모양은 같게 두고 내용만 페이지마다 바꾸기 위해서다.
     st.title(title)
     st.write(subtitle)
+    # if caption: 은 caption 값이 None 이나 빈 문자열이 아닐 때만 아래 코드를 실행하겠다는 뜻이다.
     if caption:
         # caption 은 선택값(None 가능)이라 값이 있을 때만 추가로 그린다.
         st.caption(caption)
@@ -53,6 +54,7 @@ def render_bordered_points(title: str, items: list[str]) -> None:
     """
 
     with st.container(border=True):
+        # with 블록 안의 st.* 호출은 이 컨테이너 박스 안에 들어가도록 묶인다.
         st.subheader(title)
         # 동일한 시각 구조를 유지하면 About, 설명, 학습 로그 페이지가 달라도
         # "요약 정보 블록"이라는 역할을 공통적으로 인식할 수 있다.

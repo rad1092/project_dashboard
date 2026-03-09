@@ -36,6 +36,7 @@ def test_about_data_has_required_sections() -> None:
 def test_project_items_have_minimum_shape() -> None:
     """프로젝트 카드가 기대하는 필드 구성을 유지하는지 확인한다."""
 
+    # Python 에서 빈 리스트는 False 처럼 취급되므로, assert PROJECT_ITEMS 는 "비어 있지 않은가"를 간단히 검사하는 방식이다.
     assert PROJECT_ITEMS
     for item in PROJECT_ITEMS:
         # Projects 페이지는 모든 카드가 같은 key 집합을 가진다는 전제 위에서 반복 렌더링한다.
@@ -58,6 +59,7 @@ def test_page_files_compile() -> None:
     """페이지 번호 변경 이후에도 모든 페이지 파일이 문법적으로 유효한지 확인한다."""
 
     # 페이지가 import 단계에서라도 깨지면 Streamlit 사이드바 탐색이 바로 중단되므로 문법 검사를 둔다.
+    # Path("pages").glob("*.py") 는 pages 폴더 안의 모든 파이썬 파일 경로를 하나씩 돌려주는 패턴이다.
     for page_file in Path("pages").glob("*.py"):
         # py_compile.compile(..., doraise=True) 는 문법 오류가 있으면 예외를 일으켜 테스트 실패로 연결한다.
         py_compile.compile(str(page_file), doraise=True)

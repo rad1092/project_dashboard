@@ -33,8 +33,11 @@ def render_recommendation_cards(recommendations: pd.DataFrame) -> None:
     # len(recommendations) 가 2면 2칸, 3이면 3칸만 만들기 때문에 빈 카드가 남지 않는다.
     columns = st.columns(min(len(recommendations), 3))
     for index, (_, row) in enumerate(recommendations.iterrows()):
+        # enumerate(...) 는 반복 순번과 실제 값을 함께 돌려줘 index 는 0, 1, 2 처럼 카드 위치 번호로 쓰인다.
         # iterrows() 는 DataFrame 의 각 행을 하나씩 꺼내는 pandas 반복 방식이다.
+        # 앞의 `_` 는 첫 번째 반환값인 원래 행 인덱스를 이번 코드에서는 쓰지 않겠다는 표시다.
         with columns[index]:
+            # with columns[index]: 아래에 적는 위젯들은 현재 번호의 열 칸 안에 배치된다.
             with st.container(border=True):
                 # 카드 한 장은 사용자가 표를 펼치기 전에도 핵심 판단 요소를 한눈에 보게 만드는 요약 단위다.
                 st.subheader(f"Top {index + 1}. {row['대피소명']}")

@@ -95,6 +95,8 @@ def _maybe_get_secret_data_dir() -> str | None:
 def _get_repo_default_data_dir() -> Path:
     """저장소에 포함된 기본 전처리 데이터 폴더 경로를 반환한다."""
 
+    # __file__ 은 현재 이 파일의 실제 위치를 가리키고,
+    # parents[2] 는 여기서 두 단계 위인 저장소 루트를 뜻한다.
     return Path(__file__).resolve().parents[2] / "preprocessing_data"
 
 
@@ -186,6 +188,8 @@ def resolve_data_dir(path_override: str | Path | None = None) -> Path:
         if resolved.exists():
             return resolved
 
+    # "\n".join(...) 은 검사한 경로 목록을 여러 줄 문자열로 묶어,
+    # 에러 메시지 안에서 사용자가 어떤 경로를 확인했는지 바로 읽게 만든다.
     searched = "\n".join(f"- {path}" for path in checked_paths)
     raise FileNotFoundError(
         "전처리 데이터 폴더를 찾지 못했다.\n"
@@ -242,6 +246,8 @@ def _prepare_alerts(dataframe: pd.DataFrame) -> pd.DataFrame:
     alerts["시군구"] = alerts["시군구"].astype(str).str.strip()
     alerts["시군구정규화"] = alerts["시군구"].map(normalize_sigungu_name)
     alerts["재난종류"] = alerts["재난종류"].astype(str).str.strip()
+    # fillna() -> astype(str) -> str.strip() 순서는
+    # "빈칸 메우기 -> 문자열로 통일 -> 앞뒤 공백 제거"를 한 번에 끝내는 pandas 정리 패턴이다.
     alerts["특보등급"] = alerts["특보등급"].fillna("미분류").astype(str).str.strip()
     # 날짜 변환 실패 행만 마지막에 제거해야, 그 전까지는 최대한 원문 문자열 정리를 모두 적용할 수 있다.
     # sort_values("발표시간") 는 가장 이른 시각부터 정렬한 뒤, 이후 함수가 필요에 따라 다시 최신순으로 뒤집어 쓴다.
@@ -265,6 +271,7 @@ def _prepare_shelters(dataframe: pd.DataFrame) -> pd.DataFrame:
     shelters["시도"] = shelters["시도"].astype(str).str.strip()
     shelters["시군구"] = shelters["시군구"].astype(str).str.strip()
     shelters["시군구정규화"] = shelters["시군구"].map(normalize_sigungu_name)
+    # 이 줄도 특보등급 정리와 같은 패턴으로, 결측 보완과 문자열 정리를 한 줄에서 처리한다.
     shelters["대피소유형"] = shelters["대피소유형"].fillna("미분류").astype(str).str.strip()
     # 수용인원_정렬값은 표시용 원문과 분리한 정렬 전용 숫자 값이다.
     # 전용/통합 CSV 차이를 줄이고 추천 정렬 코드를 단순하게 만들기 위해 따로 둔다.
@@ -377,6 +384,8 @@ def _build_region_centers(bundle: DisasterDatasetBundle) -> pd.DataFrame:
     """
 
     grouped = (
+        # as_index=False 를 주면 그룹 기준 열이 인덱스로 숨지 않고 일반 컬럼으로 남아,
+        # 이후 정렬과 화면 표시 단계에서 열 이름으로 계속 읽기 쉬워진다.
         bundle.shelters.groupby(["시도", "시군구", "시군구정규화"], as_index=False)
         .agg(
             중심위도=("위도", "mean"),

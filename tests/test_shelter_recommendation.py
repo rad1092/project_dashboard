@@ -42,6 +42,7 @@ def test_haversine_km_returns_positive_distance() -> None:
 def test_recommend_shelters_prefers_dedicated_candidates(sample_preprocessing_dir) -> None:
     """지진은 지진대피장소 전용 후보를 먼저 추천하고 표시용 유형도 채우는지 확인한다."""
 
+    # sample_preprocessing_dir 는 pytest fixture 가 만든 임시 CSV 폴더 경로로, 테스트마다 같은 샘플 데이터를 안전하게 재사용하게 해 준다.
     bundle = load_dataset_bundle_uncached(sample_preprocessing_dir)
     recommendations = recommend_shelters(
         bundle=bundle,
@@ -55,6 +56,7 @@ def test_recommend_shelters_prefers_dedicated_candidates(sample_preprocessing_di
     # 이 검증은 전용 CSV 의 누락 컬럼을 서비스가 보완해 주는지까지 함께 확인한다.
     # recommendations 는 DataFrame 이라 첫 번째 행은 iloc[0] 으로 읽는다.
     assert not recommendations.empty
+    # list(recommendations.columns) 로 바꾸면 컬럼 이름뿐 아니라 순서까지 함께 비교할 수 있다.
     assert list(recommendations.columns) == RECOMMENDATION_RESULT_COLUMNS
     assert recommendations.iloc[0]["추천구분"] == "전용 대피소"
     assert recommendations.iloc[0]["대피소유형"] == "지진대피장소"
@@ -75,6 +77,7 @@ def test_recommend_shelters_uses_tsunami_dedicated_label(sample_preprocessing_di
 
     # 지진해일 전용 CSV 도 통합 CSV 와 다른 스키마를 가지므로, 전용 라벨과 표준 컬럼 계약을 함께 본다.
     assert not recommendations.empty
+    # list(recommendations.columns) 로 바꾸면 컬럼 이름뿐 아니라 순서까지 함께 비교할 수 있다.
     assert list(recommendations.columns) == RECOMMENDATION_RESULT_COLUMNS
     assert recommendations.iloc[0]["추천구분"] == "전용 대피소"
     assert recommendations.iloc[0]["대피소유형"] == "해일대피장소"
@@ -95,7 +98,9 @@ def test_recommend_shelters_uses_fallback_when_needed(sample_preprocessing_dir) 
 
     # fallback 테스트는 단순히 값이 있는지만 보는 것이 아니라
     # 전용 후보가 없는 재난도 같은 반환 컬럼 계약을 유지하는지 확인하는 의미가 있다.
+    # {"기본 대피소", "대체 대피소"} 같은 집합은 허용 후보 묶음을 표현하기 좋아, in 검사와 자주 함께 쓴다.
     # in {...} 검사는 추천구분이 허용된 여러 값 중 하나인지 볼 때 가장 간단한 패턴이다.
     assert not recommendations.empty
+    # list(recommendations.columns) 로 바꾸면 컬럼 이름뿐 아니라 순서까지 함께 비교할 수 있다.
     assert list(recommendations.columns) == RECOMMENDATION_RESULT_COLUMNS
     assert recommendations.iloc[0]["추천구분"] in {"기본 대피소", "대체 대피소"}

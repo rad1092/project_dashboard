@@ -17,6 +17,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+# resolve() 로 절대경로를 만든 뒤 parents[1] 을 쓰면,
+# 어디서 pytest 를 실행하더라도 이 파일 기준 저장소 루트를 안정적으로 찾을 수 있다.
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     # 테스트 실행 위치가 달라도 dashboard 패키지를 항상 같은 루트에서 import 하게 만든다.
@@ -28,6 +30,8 @@ if str(ROOT) not in sys.path:
 def sample_preprocessing_dir(tmp_path: Path) -> Path:
     """서비스 테스트용 최소 전처리 데이터 폴더를 만든다."""
 
+    # @pytest.fixture() 가 붙은 함수는 pytest 가 필요할 때 자동 실행하고,
+    # return 값을 테스트 함수 인자로 바로 전달해 재사용 준비물을 만든다.
     base = tmp_path / "preprocessing_data"
     preprocessing = base / "preprocessing"
     # 실제 앱이 찾는 외부 폴더 구조를 그대로 흉내 내야 resolve_data_dir 이후 흐름까지 자연스럽게 검증할 수 있다.

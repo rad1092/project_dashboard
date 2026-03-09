@@ -27,6 +27,8 @@ from dashboard.services.disaster_data import (
 def test_resolve_data_dir_uses_override(sample_preprocessing_dir) -> None:
     """함수 인자로 넘긴 경로를 가장 우선해서 사용하는지 확인한다."""
 
+    # sample_preprocessing_dir 는 conftest.py 의 fixture 이름과 같아서,
+    # pytest 가 테스트 전에 임시 CSV 폴더를 만들어 이 인자로 자동 주입한다.
     # override 우선순위가 깨지면 테스트와 로컬 실행이 모두 Desktop 기본 경로에 종속될 수 있다.
     assert resolve_data_dir(sample_preprocessing_dir) == sample_preprocessing_dir.resolve()
 
@@ -65,6 +67,7 @@ def test_resolve_data_dir_prefers_secret_over_repo_local(
     for path in [secret_dir, repo_dir, desktop_dir]:
         path.mkdir()
 
+    # raising=False 를 주면 환경변수가 원래 없어도 에러 없이 "없는 상태"만 보장한다.
     monkeypatch.delenv("PREPROCESSING_DATA_DIR", raising=False)
     monkeypatch.setattr(disaster_data, "_maybe_get_secret_data_dir", lambda: str(secret_dir))
     monkeypatch.setattr(disaster_data, "_get_repo_default_data_dir", lambda: repo_dir)
