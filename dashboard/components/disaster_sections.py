@@ -4,6 +4,10 @@
 재난 앱에서 반복적으로 쓰는 설명형 UI 블록을 한곳에 모아 둔다.
 페이지 파일은 여기서 만든 작은 렌더러를 호출해
 "무엇을 보여줄지"와 "어떻게 그릴지"를 분리한다.
+
+초보자 메모:
+- 페이지는 이 함수들을 불러 "데이터를 넘기기만" 하고,
+  카드 배치나 텍스트 꾸밈 같은 표현 방식은 여기서 맡는다.
 """
 
 from __future__ import annotations
@@ -26,8 +30,10 @@ def render_recommendation_cards(recommendations: pd.DataFrame) -> None:
         return
 
     # 추천 함수가 Top 3 계약을 보장하므로, 여기서는 들어온 행 수만큼만 카드 칸을 만든다.
+    # len(recommendations) 가 2면 2칸, 3이면 3칸만 만들기 때문에 빈 카드가 남지 않는다.
     columns = st.columns(min(len(recommendations), 3))
     for index, (_, row) in enumerate(recommendations.iterrows()):
+        # iterrows() 는 DataFrame 의 각 행을 하나씩 꺼내는 pandas 반복 방식이다.
         with columns[index]:
             with st.container(border=True):
                 # 카드 한 장은 사용자가 표를 펼치기 전에도 핵심 판단 요소를 한눈에 보게 만드는 요약 단위다.
@@ -51,6 +57,7 @@ def render_dataset_cards(catalog: list[dict[str, object]]) -> None:
         with st.container(border=True):
             # 데이터셋 카드는 "이 CSV 가 무슨 역할을 하는지"를 설명하는 용도라
             # 컬럼명과 원본 경로까지 함께 보여 준다.
+            # item 은 build_dataset_catalog() 가 만든 dict 이므로 name/description/rows 같은 키를 그대로 읽는다.
             st.subheader(str(item["name"]))
             st.write(str(item["description"]))
             st.markdown(f"**행 수**: {format_number(int(item['rows']))}건")
@@ -68,6 +75,7 @@ def render_flow_steps(steps: list[dict[str, str]]) -> None:
     for item in steps:
         with st.container(border=True):
             # 단계 카드는 현재 구현과 미래 변경 지점을 같은 형식으로 비교하게 만들기 위한 반복 UI 다.
+            # columns([0.8, 0.2]) 는 왼쪽 제목 칸을 더 넓게, 오른쪽 상태 칸을 더 좁게 주는 비율 설정이다.
             head_left, head_right = st.columns([0.8, 0.2])
             with head_left:
                 st.subheader(f"{item['step']}. {item['title']}")

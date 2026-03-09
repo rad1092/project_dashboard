@@ -15,6 +15,10 @@
 나중에 어디를 바꾸면 되는가:
 - 화면 문구를 바꾸고 싶을 때는 먼저 이 파일의 상수 데이터를 수정한다.
 - 페이지 구조가 바뀌면 이 파일의 데이터 키와 페이지 렌더링 코드가 함께 맞는지 확인한다.
+
+초보자 메모:
+- 여기 있는 값들은 "계산 로직"이 아니라 "화면에 뿌릴 설명 데이터"다.
+- 즉, 이 파일은 서비스 코드처럼 값을 계산하지 않고, 페이지가 읽을 재료를 미리 정리해 둔다.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from __future__ import annotations
 ABOUT_DATA = {
     # name / headline / intro 는 About 페이지 상단에서 서로 다른 길이와 톤으로 재사용된다.
     # 제목, 한 줄 설명, 상세 설명의 역할을 분리해 두면 페이지가 더 읽기 쉬워진다.
+    # 딕셔너리 키 이름은 About 페이지가 직접 읽는 계약이므로 함부로 바꾸면 해당 페이지가 함께 수정돼야 한다.
     "name": "재난 대피소 추천 + 분석 프로젝트",
     "headline": "전처리된 재난 특보 이력과 대피소 좌표 데이터를 이용해 추천 흐름과 분석 구조를 함께 정리하는 Streamlit 앱",
     "intro": (
@@ -220,6 +225,7 @@ FLOW_STEPS = [
 
 REALTIME_EXPANSION_ITEMS = [
     # summary 는 넣고 싶은 미래 기능, why_blocked 는 현재 단계에서 막아 둔 이유를 설명한다.
+    # 이 데이터는 4번 페이지에서 그대로 순회하므로 각 항목이 같은 키 집합을 유지해야 한다.
     {
         "title": "현재 위치 자동 감지",
         "summary": "브라우저 위치 권한을 받아 위도와 경도를 자동 채우는 기능",
@@ -247,6 +253,7 @@ LIMITATIONS = [
 FUTURE_CODE_SNIPPETS = {
     # 실제 실행 함수가 아니라 st.code() 로 보여 줄 예시 문자열이라
     # import 보다 인터페이스 의도가 먼저 읽히는 짧은 형태를 유지한다.
+    # 즉, 여기에 있는 코드는 호출되지 않고 "나중에 어떤 함수가 생길지"를 문서처럼 보여 주는 용도다.
     "geolocation": """def get_browser_location() -> tuple[float, float] | None:\n    # TODO: 브라우저 위치 권한을 받은 뒤 사용자의 현재 좌표를 반환한다.\n    # 현재 단계에서는 수동 위경도 입력을 기본값으로 유지하므로 실제 호출은 막아 둔다.\n    return None\n""",
     "alerts": """def fetch_realtime_alerts() -> list[dict[str, str]]:\n    # TODO: 실시간 공공 API가 준비되면 최신 특보를 읽어 현재 재난 유형을 자동 선택한다.\n    # 지금은 전처리된 CSV만 사용하므로 이 함수는 설명용 스텁으로만 남겨 둔다.\n    return []\n""",
     "routing": """def build_live_route(start_lat: float, start_lon: float, end_lat: float, end_lon: float) -> dict[str, object] | None:\n    # TODO: 실제 경로 API를 붙이면 직선 거리 대신 도로 기준 경로와 시간을 반환한다.\n    # 유료 API를 쓰지 않는 현재 구조에서는 None 을 반환하고 직선 거리 시각화만 유지한다.\n    return None\n""",

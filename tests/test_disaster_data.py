@@ -2,6 +2,10 @@
 
 이 테스트 파일은 외부 전처리 폴더를 읽는 서비스가
 경로 탐색, CSV 로딩, 지역 요약 계약을 계속 지키는지 확인한다.
+
+초보자 메모:
+- 추천 페이지가 잘 보이려면 그 전에 데이터 폴더 탐색과 CSV 표준화가 먼저 안정적이어야 한다.
+- 그래서 이 파일은 화면보다 아래쪽 계층인 데이터 서비스의 약속을 세밀하게 확인한다.
 """
 
 from __future__ import annotations
@@ -44,6 +48,7 @@ def test_resolve_data_dir_prefers_env_over_secret_and_repo_local(
     monkeypatch.setattr(disaster_data, "_maybe_get_secret_data_dir", lambda: str(secret_dir))
     monkeypatch.setattr(disaster_data, "_get_repo_default_data_dir", lambda: repo_dir)
     monkeypatch.setattr(disaster_data, "_get_desktop_default_data_dir", lambda: desktop_dir)
+    # monkeypatch 는 테스트 중에만 함수와 환경변수를 임시로 바꿔 실제 시스템 상태에 의존하지 않게 만든다.
 
     assert resolve_data_dir() == env_dir.resolve()
 
@@ -118,6 +123,8 @@ def test_load_dataset_bundle_reports_missing_runtime_csv(tmp_path: Path) -> None
     else:
         raise AssertionError("missing runtime csv should raise FileNotFoundError")
 
+    # 오류 메시지 안에 override 방법까지 들어 있는지 보는 이유는
+    # 단순 실패보다 "사용자가 다음에 무엇을 해야 하는지"까지 안내해야 하기 때문이다.
     assert "전처리 데이터 파일이 없다" in message
     assert "PREPROCESSING_DATA_DIR" in message
 
@@ -169,6 +176,7 @@ def test_infer_region_from_coordinates_uses_nearest_region_center(sample_preproc
     pohang_region = infer_region_from_coordinates(bundle, latitude=36.0205, longitude=129.3440)
     andong_region = infer_region_from_coordinates(bundle, latitude=36.5683, longitude=128.7291)
 
+    # 여기서 보고 싶은 핵심은 정확한 미터 단위 오차가 아니라 "가장 가까운 감지 지역이 올바른가"다.
     assert pohang_region["sido"] == "경북"
     assert pohang_region["sigungu"] == "포항시"
     assert pohang_region["source"] == "auto_detected"

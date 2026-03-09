@@ -3,6 +3,10 @@
 추천 페이지가 특정 좌표 기준 Top 3 를 보여 준다면,
 이 페이지는 전체 특보 이력과 대피소 분포를 더 넓게 읽는 분석용 화면이다.
 서비스 계층에서 만든 분석 DataFrame 과 차트 빌더를 조합해 사용한다.
+
+초보자 메모:
+- 추천 페이지가 한 좌표의 결과를 보는 곳이라면, 이 페이지는 전체 데이터의 패턴을 보는 곳이다.
+- 코드도 `데이터 로드 -> 필터 선택 -> 필터 적용 -> KPI/차트/표 렌더링` 순서로 읽으면 이해가 쉽다.
 """
 
 from __future__ import annotations
@@ -44,6 +48,7 @@ st.sidebar.header("분석 필터")
 sidos = sorted(dataframe["지역"].dropna().unique().tolist())
 groups = sorted(dataframe["재난그룹"].dropna().unique().tolist())
 grades = sorted(dataframe["특보등급"].dropna().unique().tolist())
+# unique().tolist() 는 DataFrame 열에서 중복 없는 선택지 목록을 만드는 전형적인 pandas 패턴이다.
 
 selected_sidos = st.sidebar.multiselect("시도", options=sidos, default=sidos)
 selected_groups = st.sidebar.multiselect("재난 그룹", options=groups, default=groups)
@@ -56,6 +61,7 @@ filtered = dataframe[
     & dataframe["특보등급"].isin(selected_grades)
 ].copy()
 # copy() 를 붙이는 이유는 이후 발표시간 문자열 변환 같은 화면용 조작을 해도 원본 분석 프레임을 건드리지 않기 위해서다.
+# isin(...) 은 "선택된 목록 안에 들어 있는가"를 검사하는 pandas 필터 문법이다.
 
 if filtered.empty:
     st.warning("선택한 조건에 맞는 분석 데이터가 없다. 필터를 조금 넓혀 달라.")
@@ -69,6 +75,7 @@ else:
 
     # 대피소 유형 분포는 현재 선택한 시도 집합에 맞춰 보여 줘야 특보 분석과 나란히 읽기 쉽다.
     regional_shelters = bundle.shelters[bundle.shelters["시도"].isin(selected_sidos)]
+    # 특보 필터에서 고른 시도 범위와 대피소 분포 차트가 같은 지역 집합을 바라보게 맞춰 준다.
 
     chart_left, chart_right = st.columns(2, gap="large")
     with chart_left:
@@ -83,5 +90,6 @@ else:
     st.subheader("상세 특보 데이터")
     display_frame = filtered.copy()
     # 차트는 요약을 보여 주고, 이 표는 근거가 되는 행 단위 원본을 다시 확인하는 용도다.
+    # dt.strftime(...) 는 datetime 열을 사람이 읽는 문자열로 바꾸는 pandas 날짜 처리 문법이다.
     display_frame["발표시간"] = display_frame["발표시간"].dt.strftime("%Y-%m-%d %H:%M")
     st.dataframe(display_frame, use_container_width=True, hide_index=True)

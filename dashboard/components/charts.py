@@ -4,6 +4,10 @@
 차트 생성 책임만 따로 분리해 둔 곳이다.
 차트 함수는 모두 DataFrame 을 받아 Figure 를 반환하므로,
 페이지는 어떤 그래프를 어디에 놓을지만 결정하면 된다.
+
+초보자 메모:
+- 각 함수는 "데이터프레임을 받아 Figure 를 돌려준다"는 같은 패턴을 따른다.
+- 그래서 분석 페이지는 집계 방식보다 레이아웃 배치에 더 집중할 수 있다.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ def _build_empty_figure(message: str) -> go.Figure:
 
     # 빈 Figure 를 별도 함수로 빼 두면 차트별로 "빈 데이터 안내" 스타일을 반복해서 맞출 수 있다.
     figure = go.Figure()
+    # annotation 은 그래프 안에 띄우는 설명 문구라, 빈 데이터일 때 "왜 비었는지"를 직접 보여 주기 좋다.
     figure.add_annotation(text=message, showarrow=False, font=dict(size=16))
     figure.update_layout(
         xaxis=dict(visible=False),
@@ -46,6 +51,7 @@ def build_alert_trend_chart(dataframe: pd.DataFrame) -> go.Figure:
         .size()
         .rename(columns={"size": "건수"})
     )
+    # assign() 은 원본 dataframe 을 직접 바꾸지 않고, 차트 계산용 임시 열을 붙이는 pandas 패턴이다.
     # 발표시간 전체 대신 발표일 문자열로 묶는 이유는
     # 홈/분석 단계에서는 세부 시각보다 날짜 단위 흐름이 더 읽기 쉽기 때문이다.
 
@@ -81,6 +87,7 @@ def build_region_alert_chart(dataframe: pd.DataFrame) -> go.Figure:
         .rename(columns={"size": "건수"})
         .sort_values("건수", ascending=False)
     )
+    # sort_values() 를 먼저 해 두면 Plotly 가 막대를 그릴 때도 많은 지역부터 차례로 읽기 쉬워진다.
     # 건수 내림차순 정렬을 먼저 하는 이유는 막대 차트가 많은 지역부터 읽히는 편이 비교가 빠르기 때문이다.
 
     figure = px.bar(
@@ -114,6 +121,7 @@ def build_hazard_share_chart(dataframe: pd.DataFrame) -> go.Figure:
         .rename(columns={"size": "건수"})
         .sort_values("건수", ascending=False)
     )
+    # groupby().size() 는 같은 값끼리 묶은 뒤 "몇 건인지" 세는 가장 기본적인 집계 패턴이다.
     # 재난그룹이 아니라 재난종류를 그대로 쓰는 이유는
     # 도넛 차트가 원본 특보 비중을 보여 주는 보조 설명 역할이기 때문이다.
 
@@ -148,6 +156,7 @@ def build_shelter_type_chart(dataframe: pd.DataFrame) -> go.Figure:
         .rename(columns={"size": "건수"})
         .sort_values("건수", ascending=False)
     )
+    # fillna("미분류") 는 비어 있는 값을 사람이 읽을 수 있는 라벨로 바꾼 뒤 집계하겠다는 뜻이다.
     # fillna("미분류") 를 미리 하는 이유는 집계 전에 결측을 정리해 두어
     # Plotly 범례와 막대 축에서 빈 문자열/NaN 이 따로 보이는 일을 막기 위해서다.
 

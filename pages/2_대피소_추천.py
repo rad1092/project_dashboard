@@ -9,6 +9,10 @@
 - 지도는 무료 OSM 타일만 사용한다.
 - 거리 계산은 직선 거리만 제공한다.
 - 전용 대피소가 부족하면 통합 대피소를 대체 후보로 보여준다.
+
+초보자 메모:
+- 이 페이지의 핵심 흐름은 `좌표 입력 -> 감지 지역 -> 활성 지역 -> 추천 결과` 순서다.
+- 코드도 이 순서대로 읽으면 이해하기 쉽도록 위에서 아래로 배치되어 있다.
 """
 
 from __future__ import annotations
@@ -54,11 +58,13 @@ except FileNotFoundError as exc:
 
 # 수동 보정 UI 를 열었을 때는 실제 대피소 데이터가 있는 지역만 보여 주는 편이 혼란이 적다.
 regions = get_available_regions(bundle)
+# unique().tolist() 와 비슷하게, dropna().unique().tolist() 는 결측을 빼고 실제 선택 가능한 값만 리스트로 만드는 패턴이다.
 sidos = sorted(regions["시도"].dropna().unique().tolist())
 
 st.sidebar.header("추천 조건")
 # 좌표 입력이 지금 페이지의 출발점이므로, 지역보다 먼저 기본 좌표 상태를 잡아 둔다.
 if "recommendation_lat" not in st.session_state:
+    # session_state 는 Streamlit rerun 이 일어나도 값을 잠시 기억하는 저장소다.
     st.session_state["recommendation_lat"] = 35.1796
 if "recommendation_lon" not in st.session_state:
     st.session_state["recommendation_lon"] = 129.0756
@@ -87,6 +93,7 @@ selected_longitude = st.sidebar.number_input(
 )
 # number_input 을 쓰는 이유는 자유 텍스트 입력보다 좌표 범위를 강하게 제한해
 # 거리 계산과 지역 감지 함수에 잘못된 문자열이 들어가는 일을 줄이기 위해서다.
+# key 를 넣어 둔 덕분에 사용자가 입력한 값이 session_state 와 자동으로 연결된다.
 
 # 좌표를 먼저 받은 뒤, 가장 가까운 지역 중심을 찾아 현재 화면의 기본 지역으로 사용한다.
 detected_region = infer_region_from_coordinates(
@@ -94,6 +101,7 @@ detected_region = infer_region_from_coordinates(
     latitude=float(selected_latitude),
     longitude=float(selected_longitude),
 )
+# detected_region 은 dict 형태라 이후 코드에서 sido/sigungu/distance_km/source 를 이름으로 읽는다.
 detected_sido = str(detected_region["sido"] or sidos[0])
 detected_sigungu_options = get_sigungu_options(bundle, detected_sido)
 detected_sigungu = (
@@ -106,6 +114,7 @@ detected_sigungu = (
 
 # 수동 보정 UI 는 항상 열 수 있지만, 기본값은 현재 감지된 지역을 따라가게 맞춘다.
 if "manual_sido" not in st.session_state or not st.session_state["use_manual_region"]:
+    # 사용자가 아직 수동 보정을 켜지 않았다면 자동 감지 결과를 수동 보정 기본값으로 복사해 둔다.
     st.session_state["manual_sido"] = detected_sido
 if "manual_sigungu" not in st.session_state or not st.session_state["use_manual_region"]:
     st.session_state["manual_sigungu"] = detected_sigungu
@@ -135,6 +144,7 @@ with st.sidebar.expander("지역 직접 수정", expanded=st.session_state["use_
             # 세션 상태를 직접 갱신해야 number_input, 특보 요약, 추천 계산이 모두 같은 좌표를 즉시 공유한다.
             st.session_state["recommendation_lat"] = manual_center_latitude
             st.session_state["recommendation_lon"] = manual_center_longitude
+            # st.rerun() 은 바뀐 세션 값을 기준으로 스크립트를 처음부터 다시 실행하게 만든다.
             st.rerun()
 
 # 특보 요약과 추천 후보 필터가 서로 다른 지역을 보지 않도록,
@@ -147,6 +157,8 @@ else:
     active_sido = detected_sido
     active_sigungu = detected_sigungu
     region_source = str(detected_region["source"])
+# 여기서 정한 active_* 값이 바로 "활성 지역"이며,
+# 아래 특보 요약, 재난 선택, 추천 계산이 모두 같은 기준을 공유한다.
 
 disaster_options = get_disaster_options(bundle, active_sido, active_sigungu)
 default_disaster = select_priority_disaster(bundle, active_sido, active_sigungu)
@@ -157,6 +169,7 @@ selected_disaster = st.sidebar.selectbox(
     options=disaster_options,
     index=disaster_options.index(default_disaster) if default_disaster in disaster_options else 0,
 )
+# index=... 부분은 자동 선택값이 옵션 안에 있을 때만 그 위치를 기본 선택값으로 삼겠다는 뜻이다.
 
 # 페이지는 계산 로직을 직접 들고 있지 않고, 서비스가 만든 요약/추천 결과를 표시하는 역할에 집중한다.
 alert_summary = build_alert_summary(bundle, active_sido, active_sigungu)
@@ -169,6 +182,8 @@ recommendations = recommend_shelters(
     sido=active_sido,
     sigungu=active_sigungu,
 )
+# selected_latitude/selected_longitude 는 위젯 값이라 Decimal 같은 다른 타입일 수도 있어,
+# 서비스에 넘기기 전에 float() 로 한 번 명시적으로 맞춰 둔다.
 
 # 상단 KPI 는 현재 선택 기준과 데이터 요약을 한 줄에서 읽게 만드는 상황판이다.
 metric_columns = st.columns(4)
@@ -193,6 +208,8 @@ with top_left:
             st.markdown(f"- 보정 지역: **{active_sido} {active_sigungu}**")
         else:
             st.markdown(f"- 활성 지역: **{active_sido} {active_sigungu}**")
+        # 감지 지역과 활성 지역을 나눠 보여 주는 이유는
+        # 자동 추정 결과를 썼는지, 사용자가 직접 바꿨는지를 사용자가 스스로 검증할 수 있게 하기 위해서다.
 
         if alert_summary["hazards"]:
             st.markdown("- 최근 특보 유형: " + ", ".join(alert_summary["hazards"]))
@@ -234,6 +251,7 @@ with table_left:
         else:
             alert_display = recent_alerts.copy()
             # 원본 Timestamp 는 표에서 너무 길게 보일 수 있어, 근거 표에서는 사람이 읽기 좋은 문자열로만 바꾼다.
+            # copy() 를 쓰기 때문에 표 표시용 문자열 변환이 원본 recent_alerts 를 바꾸지 않는다.
             alert_display["발표시간"] = alert_display["발표시간"].dt.strftime("%Y-%m-%d %H:%M")
             st.dataframe(
                 alert_display[["발표시간", "지역", "시군구", "재난종류", "특보등급"]],
@@ -252,6 +270,7 @@ with table_right:
             display_frame["거리"] = display_frame["거리_km"].map(format_distance_km)
             # 수용인원 원문 대신 정렬용 숫자 컬럼을 쓰는 이유는
             # 전용/통합 CSV 차이와 상관없이 이미 숫자로 정리된 값을 공통으로 사용하기 위해서다.
+            # map(lambda ...) 는 각 셀 값을 하나씩 받아 사람이 읽는 문자열로 바꾸는 열 단위 변환이다.
             display_frame["수용인원"] = display_frame["수용인원_정렬값"].map(
                 lambda value: f"{format_number(value)}명"
             )

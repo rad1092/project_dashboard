@@ -7,6 +7,10 @@
 누가 사용하는가:
 - ``app.py`` 가 홈 KPI 를 만들 때 사용한다.
 - ``pages/6_Data_Analysis.py`` 가 분석용 DataFrame 과 KPI 를 읽는다.
+
+초보자 메모:
+- 이 파일은 추천 페이지용 데이터가 아니라 "분석에 맞게 다듬은 특보 데이터"를 만든다.
+- 즉, 같은 원본 CSV 를 읽더라도 분석에 필요한 열만 남기고 다시 정리하는 중간 계층이다.
 """
 
 from __future__ import annotations
@@ -43,9 +47,12 @@ def load_analysis_dataset(data_dir: str | Path | None = None) -> pd.DataFrame:
 
     # 추천 서비스와 분석 화면이 같은 재난 그룹 체계를 쓰도록 정규화 결과를 추가한다.
     analysis_frame = bundle.alerts.copy()
+    # copy() 를 쓰는 이유는 원본 alerts DataFrame 에 분석 전용 열을 덧붙여도
+    # 다른 페이지가 공유하는 원본 번들을 직접 바꾸지 않게 하기 위해서다.
     # 추천 서비스와 같은 분류 함수를 재사용하는 이유는
     # 추천 페이지의 재난 그룹 이름과 분석 차트 범례가 서로 다르게 보이지 않게 하기 위해서다.
     analysis_frame["재난그룹"] = analysis_frame["재난종류"].map(classify_disaster_type)
+    # 필요한 열만 마지막에 잘라 두면 차트 함수와 KPI 계산이 같은 최소 계약을 공유하기 쉬워진다.
     return analysis_frame[ANALYSIS_COLUMNS].sort_values("발표시간").reset_index(drop=True)
 
 
@@ -67,6 +74,7 @@ def build_kpis(dataframe: pd.DataFrame) -> dict[str, object]:
 
     # 카드 UI 가 바로 읽기 쉬운 단순 dict 형태로 반환한다.
     # 별도 객체 대신 dict 를 쓰는 이유는 metric 카드에서 필요한 값이 고정적이고 얕기 때문이다.
+    # nunique() 는 "중복을 뺀 고유 개수"를 세는 pandas 메서드라 재난 그룹 수나 지역 수 계산에 자주 쓰인다.
     return {
         "alert_count": int(len(dataframe)),
         "disaster_count": int(dataframe["재난그룹"].nunique()),

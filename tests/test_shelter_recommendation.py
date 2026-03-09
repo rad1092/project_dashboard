@@ -4,6 +4,10 @@
 추천 서비스가 어떤 재난 유형에서도 같은 반환 컬럼 계약을 지키는지를 보호한다.
 특히 지진/해일 전용 대피장소는 원본 CSV 컬럼이 다르기 때문에,
 표시용 `대피소유형` 합성과 표준 컬럼 보장이 깨지지 않는지 확인하는 것이 중요하다.
+
+초보자 메모:
+- 추천 결과는 카드, 표, 지도에서 동시에 쓰이기 때문에 "값"뿐 아니라 "컬럼 구조"도 중요한 계약이다.
+- 이 파일은 전용 대피소 우선 규칙과 fallback 규칙이 계속 유지되는지 확인한다.
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ def test_haversine_km_returns_positive_distance() -> None:
 
     distance = haversine_km(35.1796, 129.0756, 35.538, 129.312)
     # 정확한 실측 거리까지 보지 않더라도, 기본 거리 계산이 음수/0으로 깨지지 않는 계약을 먼저 확인한다.
+    # 이런 테스트는 계산식 전체를 외우지 않아도 "말이 안 되는 결과"를 빠르게 잡아 주는 역할을 한다.
     assert distance > 0
 
 
@@ -48,6 +53,7 @@ def test_recommend_shelters_prefers_dedicated_candidates(sample_preprocessing_di
     )
 
     # 이 검증은 전용 CSV 의 누락 컬럼을 서비스가 보완해 주는지까지 함께 확인한다.
+    # recommendations 는 DataFrame 이라 첫 번째 행은 iloc[0] 으로 읽는다.
     assert not recommendations.empty
     assert list(recommendations.columns) == RECOMMENDATION_RESULT_COLUMNS
     assert recommendations.iloc[0]["추천구분"] == "전용 대피소"
@@ -89,6 +95,7 @@ def test_recommend_shelters_uses_fallback_when_needed(sample_preprocessing_dir) 
 
     # fallback 테스트는 단순히 값이 있는지만 보는 것이 아니라
     # 전용 후보가 없는 재난도 같은 반환 컬럼 계약을 유지하는지 확인하는 의미가 있다.
+    # in {...} 검사는 추천구분이 허용된 여러 값 중 하나인지 볼 때 가장 간단한 패턴이다.
     assert not recommendations.empty
     assert list(recommendations.columns) == RECOMMENDATION_RESULT_COLUMNS
     assert recommendations.iloc[0]["추천구분"] in {"기본 대피소", "대체 대피소"}

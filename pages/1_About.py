@@ -3,6 +3,10 @@
 이 페이지는 프로젝트의 목적, 현재 구현 범위, 데이터 한계를 먼저 설명하는 허브다.
 사용자가 추천 화면으로 바로 넘어가기 전에
 "이 앱이 어떤 데이터를 기반으로 무엇을 하려는지"를 이해하게 만드는 역할을 맡는다.
+
+초보자 메모:
+- 이 페이지는 계산보다 설명이 중심이라 content.py 의 고정 텍스트를 많이 읽는다.
+- 왼쪽은 프로젝트 설명, 오른쪽은 보조 정보라는 두 덩어리로 읽으면 구조가 잘 보인다.
 """
 
 from __future__ import annotations
@@ -38,6 +42,7 @@ with left:
         st.subheader(ABOUT_DATA["name"])
         st.write(ABOUT_DATA["headline"])
         # intro 는 headline 보다 길고 설명형 문장이라 별도 write 로 내려 읽게 한다.
+        # 같은 dict 안의 여러 키를 나눠 쓰는 이유는 제목/한 줄 설명/본문 길이를 서로 다르게 유지하기 위해서다.
         st.write(ABOUT_DATA["intro"])
 
     render_bordered_points("집중하고 있는 방향", ABOUT_DATA["focus_areas"])
@@ -70,6 +75,7 @@ else:
         st.subheader("현재 연결된 전처리 데이터")
         # 소개 페이지에서도 실제 데이터 행 수를 보여 주면
         # 이 프로젝트가 더미 화면이 아니라 실데이터 기반이라는 점을 초반에 전달할 수 있다.
+        # format_number() 는 숫자 표기를 보기 좋게만 바꿀 뿐, 실제 행 수를 바꾸지는 않는다.
         for item in catalog:
             st.markdown(
                 f"- **{item['name']}**: {format_number(item['rows'])}건, {item['description']}"

@@ -3,6 +3,10 @@
 테스트는 실제 Desktop 데이터 폴더에 의존하지 않고도 돌아가야 하므로,
 이 파일은 최소한의 전처리 CSV 구조를 임시 디렉터리에 만들어 서비스 테스트가 같은 계약을 검증하게 한다.
 또한 프로젝트 루트를 import 경로에 추가해 ``dashboard`` 패키지를 안정적으로 불러오게 한다.
+
+초보자 메모:
+- fixture 는 여러 테스트가 함께 재사용하는 "준비물 생성 함수"라고 보면 된다.
+- 이 파일 덕분에 실제 로컬 CSV 나 Desktop 폴더가 없어도 서비스 테스트를 안전하게 돌릴 수 있다.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     # 테스트 실행 위치가 달라도 dashboard 패키지를 항상 같은 루트에서 import 하게 만든다.
+    # sys.path 는 Python 이 import 할 때 찾는 폴더 목록이다.
     sys.path.insert(0, str(ROOT))
 
 
@@ -26,6 +31,7 @@ def sample_preprocessing_dir(tmp_path: Path) -> Path:
     base = tmp_path / "preprocessing_data"
     preprocessing = base / "preprocessing"
     # 실제 앱이 찾는 외부 폴더 구조를 그대로 흉내 내야 resolve_data_dir 이후 흐름까지 자연스럽게 검증할 수 있다.
+    # tmp_path 는 pytest 가 테스트마다 새로 만들어 주는 임시 폴더다.
     preprocessing.mkdir(parents=True)
 
     # 특보 샘플은 지역 필터, 최신 시각 정렬, 재난 그룹 정규화를 모두 검증할 수 있게 작게 구성한다.
@@ -57,6 +63,7 @@ def sample_preprocessing_dir(tmp_path: Path) -> Path:
             },
         ]
     ).to_csv(preprocessing / "danger_clean.csv", index=False, encoding="utf-8-sig")
+    # to_csv(..., index=False) 는 DataFrame 의 자동 행 번호를 CSV 에 넣지 않겠다는 뜻이다.
 
     # 통합 대피소 샘플은 포항/안동/울산처럼 서로 떨어진 지역을 섞어 둬야
     # 좌표 기반 지역 감지와 fallback 추천을 함께 검증할 수 있다.

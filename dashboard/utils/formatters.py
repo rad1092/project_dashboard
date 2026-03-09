@@ -3,6 +3,10 @@
 왜 필요한가:
 - 같은 숫자/날짜라도 화면마다 표현이 달라지면 사용자가 결과를 비교하기 어렵다.
 - 이 모듈은 카드, 표, 설명 텍스트가 같은 표시 형식을 쓰게 만드는 작은 규칙 모음이다.
+
+초보자 메모:
+- 포맷터는 값을 "계산"하기보다 "사람이 읽기 좋은 문자열"로 바꾸는 마지막 단계다.
+- 그래서 추천 규칙이나 분석 로직과는 분리해 두는 편이 유지보수에 유리하다.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ def format_number(value: int | float) -> str:
     """
 
     # float 로 한 번 감싸는 이유는 int/float 가 섞여 들어와도 같은 포맷 문자열로 처리하기 위해서다.
+    # :,.0f 는 "천 단위 쉼표를 넣고 소수점 없이 출력"하라는 Python 포맷 문법이다.
     return f"{float(value):,.0f}"
 
 
@@ -36,6 +41,7 @@ def format_decimal(value: float, digits: int = 1) -> str:
     """
 
     # 자릿수를 인자로 받는 이유는 거리, 비율, 평균값처럼 화면별 요구 정밀도가 다르기 때문이다.
+    # f-string 안에서 {digits} 를 다시 쓰는 형태는 "가변 자릿수" 포맷을 만들 때 자주 쓰인다.
     return f"{value:.{digits}f}"
 
 
@@ -60,6 +66,7 @@ def format_datetime(value: pd.Timestamp | None) -> str:
     if value is None or pd.isna(value):
         return "-"
     # pd.Timestamp 로 한 번 감싸 두면 datetime, str, Timestamp 가 섞여 들어와도 같은 출력 형식을 유지한다.
+    # strftime() 은 날짜/시간 객체를 원하는 문자열 모양으로 바꾸는 표준 메서드다.
     return pd.Timestamp(value).strftime("%Y-%m-%d %H:%M")
 
 

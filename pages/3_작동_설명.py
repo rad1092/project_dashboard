@@ -2,6 +2,10 @@
 
 청사진 이미지를 그대로 붙이지 않고, 실제 코드 흐름을 카드와 코드 조각으로 다시 풀어낸다.
 현재 구현 구간과 미래 교체 구간을 나눠 보여 주는 것이 이 페이지의 핵심이다.
+
+초보자 메모:
+- 추천 페이지가 "결과를 보여 주는 곳"이라면, 이 페이지는 "그 결과가 어디서 나왔는지 해설하는 곳"이다.
+- 따라서 계산 로직을 다시 구현하지 않고, content.py 와 서비스 설명 데이터를 꺼내 와 읽기 쉽게 배치한다.
 """
 
 from __future__ import annotations
@@ -63,6 +67,7 @@ with right:
         st.subheader("향후 교체 위치 예시")
         # 아래 코드 블록은 실행 코드가 아니라,
         # 미래 실시간 확장 시 어느 계층을 바꿔야 하는지 보여 주는 설명용 스텁이다.
+        # st.code() 는 문자열을 코드 블록처럼 보여 줄 뿐 실제로 실행하지 않는다.
         st.code(FUTURE_CODE_SNIPPETS["geolocation"], language="python")
         st.code(FUTURE_CODE_SNIPPETS["alerts"], language="python")
         st.code(FUTURE_CODE_SNIPPETS["routing"], language="python")

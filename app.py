@@ -4,6 +4,11 @@
 현재 프로젝트가 무엇을 목표로 하는지, 어떤 데이터가 연결되어 있는지,
 그리고 사용자가 어느 페이지부터 보면 되는지를 한 번에 안내하는 역할을 맡는다.
 
+초보자 관점에서 이 파일을 읽는 방법:
+- 위쪽 import 는 "홈 화면이 어떤 계층을 호출하는가"를 보여 준다.
+- 중간의 데이터 로딩 try/except 는 "앱이 어디서 멈출 수 있는가"를 보여 준다.
+- 아래 UI 블록은 "요약 카드 -> 페이지 안내 -> 데이터 설명" 순서로 읽으면 된다.
+
 이 파일이 주로 호출하는 모듈:
 - ``dashboard.config``: 공통 페이지 제목과 메타데이터
 - ``dashboard.services.disaster_data``: 전처리 데이터 로딩과 데이터셋 요약
@@ -48,8 +53,11 @@ st.caption(
 
 try:
     # 홈 화면에서부터 실제 데이터 연결 상태를 확인할 수 있게 기본 데이터 폴더를 바로 읽는다.
+    # resolve_data_dir() 는 "데이터 폴더가 어디 있는가"를 정하고,
+    # load_dataset_bundle() 은 "그 폴더 안 CSV 를 앱용 DataFrame 으로 바꾸는 일"까지 맡는다.
     data_dir = resolve_data_dir()
     bundle = load_dataset_bundle()
+    # 홈 KPI 는 분석 페이지와 같은 기준을 써야 하므로 분석용 로더를 그대로 재사용한다.
     analysis_frame = load_analysis_dataset()
 except FileNotFoundError as exc:
     st.error(str(exc))
@@ -63,8 +71,12 @@ except FileNotFoundError as exc:
 # 홈 KPI 는 사용자가 지금 연결된 데이터 규모를 첫 화면에서 바로 파악하게 하는 요약 영역이다.
 # 아래 metric_columns 는 숫자만 나열하는 것이 아니라 "이 앱이 어떤 데이터 위에서 움직이는지"를 압축해서 보여 준다.
 kpis = build_kpis(analysis_frame)
+# build_dataset_catalog() 는 원본 DataFrame 자체가 아니라
+# 화면에서 바로 반복 출력하기 쉬운 dict 목록 형태의 설명 데이터를 만들어 준다.
 catalog = build_dataset_catalog(bundle)
 
+# st.columns(4) 는 4칸짜리 "빈 레이아웃 상자"를 먼저 만든다.
+# 이후 metric_columns[0] 같은 식으로 각 칸에 KPI 카드를 배치한다.
 metric_columns = st.columns(4)
 metric_columns[0].metric("특보 기록 수", format_number(kpis["alert_count"]))
 metric_columns[1].metric("통합 대피소 수", format_number(len(bundle.shelters)))
@@ -81,6 +93,7 @@ with left:
         st.subheader("이 앱에서 바로 볼 수 있는 것")
         # overview 포인트는 홈에서 가장 먼저 읽히는 문장이라 길게 설명하지 않고
         # 사용자가 바로 다음 행동을 정할 수 있을 정도의 정보만 남긴다.
+        # 이 for 문은 리스트의 각 문장을 한 줄씩 불릿으로 바꿔 그리는 반복 렌더링이다.
         for point in HOME_OVERVIEW_POINTS:
             st.markdown(f"- {point}")
 
@@ -88,6 +101,7 @@ with left:
         st.subheader("추천 흐름 페이지")
         # 페이지 키를 하드코딩 문자열로 반복하지 않고 PAGE_META 를 함께 쓰는 이유는
         # 페이지 순서나 이름이 바뀌어도 홈 안내가 같은 기준표를 따라가게 하기 위해서다.
+        # 여기서 page_key 는 실제 페이지 파일명이 아니라 config.py 에 정의한 메타데이터 키다.
         for page_key in ["about", "recommendation", "flow", "realtime"]:
             page = PAGE_META[page_key]
             st.markdown(f"- **{page['label']}**: {page['summary']}")
@@ -103,6 +117,7 @@ with right:
         st.subheader("현재 연결된 데이터셋")
         # 데이터셋 카탈로그를 홈에서도 보여 주면 사용자가 CSV 역할을 페이지 진입 전에 이해할 수 있다.
         # item 딕셔너리 구조는 build_dataset_catalog() 의 반환 계약을 그대로 따른다.
+        # item['rows'] 는 이미 정수이지만 format_number() 를 거쳐 천 단위 구분기호를 붙여 읽기 쉽게 만든다.
         for item in catalog:
             st.markdown(
                 f"- **{item['name']}**: {format_number(item['rows'])}건, "
@@ -116,6 +131,8 @@ with right:
 
     with st.container(border=True):
         st.subheader("데이터 폴더")
+        # st.code() 는 코드 블록처럼 고정폭 글꼴로 보여 주기 때문에
+        # 경로 문자열처럼 복사하거나 눈으로 확인해야 하는 값에 적합하다.
         st.code(str(data_dir), language="text")
         st.write(
             "이 경로의 CSV는 앱이 읽기 전용으로 사용한다. "

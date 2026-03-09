@@ -12,6 +12,10 @@
 - CSV 컬럼 검증
 - 특보/대피소 DataFrame 표준화
 - 전용 대피소 표시용 컬럼 합성
+
+초보자 메모:
+- 이 파일은 "원본 CSV 를 그대로 페이지에 넘기지 않고, 앱이 쓰기 좋은 공통 형태로 정리하는 관문"이다.
+- 추천 페이지의 감지 지역 계산도 여기서 끝내 두기 때문에, 페이지는 좌표를 넣고 결과만 받으면 된다.
 """
 
 from __future__ import annotations
@@ -83,6 +87,7 @@ def _maybe_get_secret_data_dir() -> str | None:
         if "app" in st.secrets and "preprocessing_data_dir" in st.secrets["app"]:
             return str(st.secrets["app"]["preprocessing_data_dir"])
     except Exception:
+        # secrets 자체가 없는 로컬 실행에서도 앱이 바로 죽지 않도록 None 으로 안전하게 넘긴다.
         return None
     return None
 
@@ -109,8 +114,10 @@ def normalize_sigungu_name(value: str | None) -> str:
     if value is None or pd.isna(value):
         return ""
 
+    # strip() 은 앞뒤 공백 제거, replace(" ", "") 는 중간 공백 제거 역할이다.
     text = str(value).strip().replace(" ", "")
     if text.endswith(("시", "군")) and len(text) > 1:
+        # 포항시 -> 포항처럼 끝 글자를 잘라 표기 차이를 줄인다.
         return text[:-1]
     return text
 
@@ -128,6 +135,7 @@ def _haversine_km(
     """
 
     earth_radius_km = 6371.0
+    # 삼각함수 계산은 라디안 단위를 쓰므로 입력 위경도를 먼저 변환한다.
     lat_a = math.radians(latitude_a)
     lon_a = math.radians(longitude_a)
     lat_b = math.radians(latitude_b)
@@ -171,6 +179,8 @@ def resolve_data_dir(path_override: str | Path | None = None) -> Path:
     # 앞에서부터 우선순위가 높은 경로이므로, exists() 가 되는 첫 후보를 바로 채택한다.
     checked_paths: list[Path] = []
     for candidate in candidates:
+        # expanduser() 는 ~ 경로를 실제 홈 폴더로 바꾸고,
+        # resolve() 는 상대경로를 절대경로로 정리해 비교를 더 안전하게 만든다.
         resolved = candidate.expanduser().resolve()
         checked_paths.append(resolved)
         if resolved.exists():
@@ -210,6 +220,7 @@ def _validate_columns(dataframe: pd.DataFrame, expected_columns: list[str], labe
     """
 
     missing_columns = [column for column in expected_columns if column not in dataframe.columns]
+    # list comprehension 은 조건에 맞는 항목만 새 리스트로 모으는 Python 기본 패턴이다.
     if missing_columns:
         raise ValueError(f"{label} CSV 에 필요한 컬럼이 없다: {missing_columns}")
 
@@ -224,6 +235,7 @@ def _prepare_alerts(dataframe: pd.DataFrame) -> pd.DataFrame:
     _validate_columns(dataframe, ALERT_COLUMNS, "danger_clean.csv")
 
     alerts = dataframe.copy()
+    # copy() 를 먼저 해 두면 원본 dataframe 을 그대로 보존한 채 앱용 열을 덧붙일 수 있다.
     # 문자열 날짜를 Timestamp 로 맞춰야 최근 특보 계산과 정렬이 안정적으로 동작한다.
     alerts["발표시간"] = pd.to_datetime(alerts["발표시간"], errors="coerce")
     alerts["지역"] = alerts["지역"].astype(str).str.strip()
@@ -232,6 +244,7 @@ def _prepare_alerts(dataframe: pd.DataFrame) -> pd.DataFrame:
     alerts["재난종류"] = alerts["재난종류"].astype(str).str.strip()
     alerts["특보등급"] = alerts["특보등급"].fillna("미분류").astype(str).str.strip()
     # 날짜 변환 실패 행만 마지막에 제거해야, 그 전까지는 최대한 원문 문자열 정리를 모두 적용할 수 있다.
+    # sort_values("발표시간") 는 가장 이른 시각부터 정렬한 뒤, 이후 함수가 필요에 따라 다시 최신순으로 뒤집어 쓴다.
     return alerts.dropna(subset=["발표시간"]).sort_values("발표시간").reset_index(drop=True)
 
 
@@ -256,6 +269,7 @@ def _prepare_shelters(dataframe: pd.DataFrame) -> pd.DataFrame:
     # 수용인원_정렬값은 표시용 원문과 분리한 정렬 전용 숫자 값이다.
     # 전용/통합 CSV 차이를 줄이고 추천 정렬 코드를 단순하게 만들기 위해 따로 둔다.
     shelters["수용인원_정렬값"] = shelters["수용인원"].fillna(0)
+    # dropna(subset=["위도", "경도"]) 는 지도에 찍을 수 없는 좌표 없는 행만 제거한다는 뜻이다.
     return shelters.dropna(subset=["위도", "경도"]).reset_index(drop=True)
 
 
@@ -275,6 +289,7 @@ def _prepare_special_shelters(
     _validate_columns(dataframe, expected_columns, label)
 
     shelters = dataframe.copy()
+    # 전용 CSV 도 통합 대피소와 같은 계산 파이프라인을 타야 하므로 먼저 숫자형/문자열 정리를 맞춘다.
     shelters["위도"] = pd.to_numeric(shelters["위도"], errors="coerce")
     shelters["경도"] = pd.to_numeric(shelters["경도"], errors="coerce")
     shelters["수용인원"] = pd.to_numeric(shelters["수용인원"], errors="coerce")
@@ -285,6 +300,7 @@ def _prepare_special_shelters(
     if "지역" not in shelters.columns:
         # 전용 CSV 는 지역 문자열이 빠질 수 있어 설명용 최소 지역명을 직접 합성한다.
         shelters["지역"] = shelters["시도"] + " " + shelters["시군구"]
+    # fillna() 는 지역 열이 존재하더라도 일부 값만 비어 있는 경우를 메워 주는 보완 단계다.
     shelters["지역"] = shelters["지역"].fillna(shelters["시도"] + " " + shelters["시군구"])
 
     # 원본 전용 CSV 는 유형 컬럼이 없으므로,
@@ -304,6 +320,7 @@ def load_dataset_bundle_uncached(path_override: str | Path | None = None) -> Dis
     data_dir = resolve_data_dir(path_override)
     # 모든 CSV 는 이 함수에서만 읽고 정리해 두고,
     # 이후 화면 계층은 정리된 DataFrame 만 사용한다.
+    # 이렇게 묶어 두면 페이지는 alerts/shelters/earthquake_shelters 같은 이름으로 같은 번들을 공유한다.
     alerts = _prepare_alerts(_read_csv(data_dir / DATASET_FILE_MAP["alerts"]))
     shelters = _prepare_shelters(_read_csv(data_dir / DATASET_FILE_MAP["shelters"]))
     earthquake_shelters = _prepare_special_shelters(
@@ -332,6 +349,7 @@ def load_dataset_bundle(path_override: str | None = None) -> DisasterDatasetBund
     Streamlit 은 입력이 바뀔 때마다 스크립트를 다시 실행하므로, 무거운 CSV 로딩을 캐시한다.
     """
 
+    # 이 함수는 "캐시를 붙인 입구"이고, 실제 CSV 읽기와 전처리는 uncached 함수가 맡는다.
     return load_dataset_bundle_uncached(path_override)
 
 
@@ -342,6 +360,7 @@ def get_available_regions(bundle: DisasterDatasetBundle) -> pd.DataFrame:
     """
 
     # drop_duplicates() 는 selectbox 옵션에 같은 지역이 반복되는 것을 막기 위한 처리다.
+    # sort_values() 를 함께 쓰면 드롭다운이 매번 같은 순서로 보여 사용자가 덜 혼란스럽다.
     return (
         bundle.shelters[["시도", "시군구"]]
         .drop_duplicates()
@@ -367,6 +386,8 @@ def _build_region_centers(bundle: DisasterDatasetBundle) -> pd.DataFrame:
         .sort_values(["시도", "시군구"])
         .reset_index(drop=True)
     )
+    # agg() 는 그룹별 대표값을 계산하는 단계로,
+    # 여기서는 평균 위도/경도와 대피소 개수를 한 번에 만든다.
     # 평균 좌표를 쓰는 이유는 행정경계 데이터 없이도 각 지역의 대표 중심점을 설명 가능하게 만들 수 있기 때문이다.
     return grouped
 
@@ -404,9 +425,11 @@ def infer_region_from_coordinates(
         ),
         axis=1,
     )
+    # axis=1 은 "행(row) 기준으로 한 줄씩 계산"하라는 뜻이다.
     scored = scored.sort_values(["distance_km", "대피소수"], ascending=[True, False]).reset_index(
         drop=True
     )
+    # iloc[0] 은 정렬된 DataFrame 의 첫 번째 행을 꺼내는 pandas 위치 기반 접근이다.
     nearest = scored.iloc[0]
     return {
         "sido": str(nearest["시도"]),
@@ -424,6 +447,7 @@ def get_sigungu_options(bundle: DisasterDatasetBundle, sido: str) -> list[str]:
 
     # 시도별로 시군구를 다시 계산해야 수동 보정 UI 가 항상 유효한 조합만 보여 줄 수 있다.
     filtered = bundle.shelters[bundle.shelters["시도"] == sido]
+    # unique() 는 중복을 제거하고, tolist() 는 pandas 결과를 일반 Python 리스트로 바꾼다.
     return sorted(filtered["시군구"].dropna().unique().tolist())
 
 
@@ -438,6 +462,7 @@ def get_region_center(bundle: DisasterDatasetBundle, sido: str, sigungu: str) ->
         (region_centers["시도"] == sido)
         & (region_centers["시군구정규화"] == normalize_sigungu_name(sigungu))
     ]
+    # 조건식을 괄호로 나누는 이유는 pandas 에서 여러 열 조건을 결합할 때 우선순위를 명확히 하기 위해서다.
     # 시군구 단위 후보가 없을 때는 같은 시도 평균으로 넓혀 수동 보정용 좌표 보조 기능이 비지 않게 한다.
     if filtered.empty:
         filtered = region_centers[region_centers["시도"] == sido]
@@ -467,6 +492,7 @@ def get_recent_alerts(
         if filtered.empty:
             filtered = bundle.alerts[bundle.alerts["지역"] == sido]
 
+    # head(limit) 는 최신순으로 정렬한 뒤 앞에서 limit 건만 자르는 pandas 패턴이다.
     return filtered.sort_values("발표시간", ascending=False).head(limit).reset_index(drop=True)
 
 
@@ -489,6 +515,7 @@ def build_alert_summary(
             "hazards": [],
         }
 
+    # unique().tolist() 는 최근 특보 안에 같은 재난명이 반복돼도 한 번만 남겨 요약 문구를 간단히 만든다.
     return {
         "latest_time": pd.Timestamp(recent_alerts.iloc[0]["발표시간"]),
         "latest_disaster": str(recent_alerts.iloc[0]["재난종류"]),
@@ -518,6 +545,7 @@ def build_dataset_catalog(
     # dict 리스트 형태를 쓰는 이유는 홈과 설명 페이지가 같은 데이터를 바로 순회해 불릿/카드를 만들기 쉽기 때문이다.
     catalog: list[dict[str, object]] = []
     for key, dataframe in dataset_frames.items():
+        # for 루프를 쓰는 이유는 데이터셋이 늘어나도 같은 형태의 설명 dict 를 반복해서 만들기 쉽기 때문이다.
         catalog.append(
             {
                 "name": key,

@@ -3,6 +3,10 @@
 현재는 과거 전처리 데이터 기반 앱이지만,
 이 페이지는 자동 위치, 실시간 특보, 실제 경로 안내를 나중에 붙일 자리를 먼저 정리한다.
 즉시 실행보다 "어디를 바꿔야 하는지"를 설명하는 설계 페이지에 가깝다.
+
+초보자 메모:
+- 여기의 버튼과 코드 조각은 지금 동작하는 기능이 아니라, 미래 확장 위치를 설명하는 표지판이다.
+- 그래서 이 파일은 실제 API 호출 코드보다 설명용 텍스트와 스텁 예시가 중심이다.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ render_page_intro(
 # 비활성화된 버튼은 미래 기능의 위치를 시각적으로 보여 주는 자리표시자다.
 # 실제 기능이 없더라도 버튼 모양을 먼저 고정해 두면 나중에 어떤 사용자 행동이 추가될지 UI 차원에서 미리 정리할 수 있다.
 button_columns = st.columns(3)
+# columns() 를 먼저 만들고 각 칸에서 button() 을 호출하면 같은 줄에 버튼 3개를 나란히 놓을 수 있다.
 button_columns[0].button("현재 위치 자동 감지 (준비중)", disabled=True)
 button_columns[1].button("실시간 특보 새로고침 (준비중)", disabled=True)
 button_columns[2].button("실제 경로 안내 (준비중)", disabled=True)
@@ -39,6 +44,7 @@ for item in REALTIME_EXPANSION_ITEMS:
         st.subheader(item["title"])
         st.write(item["summary"])
         # why_blocked 를 따로 보여 주는 이유는 "왜 지금은 안 되는지"를 단순 미구현이 아니라 의도된 범위 제한으로 설명하기 위해서다.
+        # item 은 content.py 의 dict 데이터이므로 키 이름이 바뀌면 이 페이지도 함께 수정돼야 한다.
         st.markdown(f"**지금 막아 둔 이유**: {item['why_blocked']}")
 
 left, right = st.columns(2, gap="large")

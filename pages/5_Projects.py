@@ -2,6 +2,10 @@
 
 이 페이지는 저장소 안에서 진행 중인 기능을
 상태, 역할, 핵심 포인트, 다음 액션 기준으로 기록하는 작업 보드 역할을 한다.
+
+초보자 메모:
+- 이 페이지는 기능 실행 화면이 아니라 "현재 저장소가 어디까지 왔는지"를 설명하는 메모 보드에 가깝다.
+- 그래서 content.py 의 PROJECT_ITEMS 데이터를 순회해 카드처럼 뿌리는 구조로 되어 있다.
 """
 
 from __future__ import annotations
@@ -33,6 +37,7 @@ for item in PROJECT_ITEMS:
             st.write(item["summary"])
         with top_right:
             # 상태 코드 그대로보다 사람이 읽는 라벨이 중요하므로 formatters 를 거쳐 표시한다.
+            # 예를 들어 active 같은 내부 코드값을 "운영 중" 같은 사용자 친화 라벨로 바꿔 보여 준다.
             st.metric("상태", label_status(item["status"]))
 
         detail_left, detail_right = st.columns([0.55, 0.45], gap="large")
