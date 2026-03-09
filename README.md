@@ -52,6 +52,7 @@
 .venv\Scripts\activate
 uv sync --dev
 streamlit run app.py
+#devcontainer 안써도 됩니다.
 ```
 
 ## 테스트
@@ -86,6 +87,7 @@ streamlit run app.py
 - `docs/14_CODING_AND_CLASS_GUIDELINES.md`: 코드 작성과 책임 분리 원칙
 - `docs/15_DATA_SOURCE_EXPANSION_GUIDE.md`: 실시간 데이터 확장 가이드
 - `docs/16_PAGE_AND_FEATURE_EXPANSION_GUIDE.md`: 페이지와 기능 확장 기준
+- `docs/17_CONNECTION_MAP_GUIDE.md`: 전체 연결 구조와 추천 페이지 호출 흐름 다이어그램
 
 입문자라면 먼저 `docs/01` 부터 `docs/04` 까지 읽고,
 그다음 실제 코드와 연결되는 `docs/08` 부터 `docs/12` 를 보는 순서를 권장합니다.
