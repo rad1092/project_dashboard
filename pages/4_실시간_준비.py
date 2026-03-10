@@ -1,7 +1,5 @@
 """향후 실시간 버전 확장 포인트를 설명하는 준비 페이지."""
 
-from __future__ import annotations
-
 import os
 
 import streamlit as st

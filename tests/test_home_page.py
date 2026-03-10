@@ -1,7 +1,5 @@
 """홈 페이지 내부 헬퍼와 메타데이터를 검증하는 테스트."""
 
-from __future__ import annotations
-
 
 def test_home_page_meta_and_copy_are_present(home_module) -> None:
     expected_keys = {

@@ -1,7 +1,5 @@
 """추천 페이지 내부 데이터 헬퍼와 추천 규칙을 검증하는 테스트."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 

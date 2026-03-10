@@ -1,7 +1,5 @@
 """현재 재난 앱 구현 작업을 기록하는 프로젝트 페이지."""
 
-from __future__ import annotations
-
 import os
 
 import streamlit as st

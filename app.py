@@ -10,8 +10,6 @@
 - 마지막 ``render_page()`` 는 실제 화면 순서를 담당한다.
 """
 
-from __future__ import annotations
-
 import os
 from pathlib import Path
 

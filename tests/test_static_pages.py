@@ -1,7 +1,5 @@
 """정적 페이지의 요약 콘텐츠와 docs 연계를 검증하는 테스트."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 DETAIL_DOC_PATH = Path("docs/04_INTERNAL_FUNCTION_CLEANUP.md")

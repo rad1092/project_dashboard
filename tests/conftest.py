@@ -1,7 +1,5 @@
 """pytest 공통 설정과 모듈 로더, 샘플 전처리 데이터 fixture."""
 
-from __future__ import annotations
-
 import importlib.util
 import os
 import sys

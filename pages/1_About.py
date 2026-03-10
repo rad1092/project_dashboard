@@ -1,7 +1,5 @@
 """재난 대피소 추천 프로젝트 소개 페이지."""
 
-from __future__ import annotations
-
 import os
 
 import streamlit as st

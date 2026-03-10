@@ -1,7 +1,5 @@
 """대피소 추천이 어떤 흐름으로 작동하는지 설명하는 페이지."""
 
-from __future__ import annotations
-
 import os
 
 import streamlit as st

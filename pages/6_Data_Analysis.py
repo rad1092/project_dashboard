@@ -1,7 +1,5 @@
 """과거 재난 특보와 대피소 분포를 보는 분석 페이지."""
 
-from __future__ import annotations
-
 import os
 from pathlib import Path
 

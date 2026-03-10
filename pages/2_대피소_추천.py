@@ -11,8 +11,6 @@
 - 전용 대피소가 부족하면 통합 대피소를 대체 후보로 보여준다.
 """
 
-from __future__ import annotations
-
 import math
 import os
 from pathlib import Path

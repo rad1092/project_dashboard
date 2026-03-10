@@ -1,7 +1,5 @@
 """학습 로그와 확장 로드맵 페이지."""
 
-from __future__ import annotations
-
 import os
 
 import streamlit as st

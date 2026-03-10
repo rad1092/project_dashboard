@@ -1,7 +1,5 @@
 """분석 페이지 내부 데이터 준비와 KPI 계산을 검증하는 테스트."""
 
-from __future__ import annotations
-
 
 def test_load_analysis_dataset_has_expected_columns(
     analysis_page_module,
