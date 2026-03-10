@@ -9,278 +9,1031 @@
 - 지도는 무료 OSM 타일만 사용한다.
 - 거리 계산은 직선 거리만 제공한다.
 - 전용 대피소가 부족하면 통합 대피소를 대체 후보로 보여준다.
-
-초보자 메모:
-- 이 페이지의 핵심 흐름은 `좌표 입력 -> 감지 지역 -> 활성 지역 -> 추천 결과` 순서다.
-- 코드도 이 순서대로 읽으면 이해하기 쉽도록 위에서 아래로 배치되어 있다.
 """
 
 from __future__ import annotations
 
+import math
+import os
+from pathlib import Path
+
+import folium
+import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
-from dashboard.components.disaster_map import render_recommendation_map
-from dashboard.components.disaster_sections import render_recommendation_cards
-from dashboard.components.layout import render_page_intro
-from dashboard.config import apply_page_config
-from dashboard.services.disaster_data import (
-    build_alert_summary,
-    get_available_regions,
-    infer_region_from_coordinates,
-    get_recent_alerts,
-    get_region_center,
-    get_sigungu_options,
-    load_dataset_bundle,
-)
-from dashboard.services.shelter_recommendation import (
-    get_disaster_options,
-    recommend_shelters,
-    select_priority_disaster,
-)
-from dashboard.utils.formatters import format_datetime, format_distance_km, format_number
+APP_TITLE = "재난 대피소 추천 워크스페이스"
+APP_ICON = "🛟"
+PAGE_LABEL = "2 대피소 추천"
 
+ALERT_COLUMNS = ["발표시간", "지역", "시군구", "재난종류", "특보등급", "해당지역"]
+SHELTER_COLUMNS = ["대피소명", "주소", "대피소유형", "위도", "경도", "시도", "시군구", "지역", "수용인원"]
+EARTHQUAKE_COLUMNS = ["대피소명", "주소", "위도", "경도", "수용인원", "시도", "시군구"]
+TSUNAMI_COLUMNS = ["대피소명", "주소", "위도", "경도", "수용인원", "지역", "시도", "시군구"]
 
-apply_page_config("recommendation")
+DATASET_FILE_MAP = {
+    "alerts": Path("preprocessing") / "danger_clean.csv",
+    "shelters": Path("preprocessing") / "final_shelter_dataset.csv",
+    "earthquake_shelters": Path("preprocessing") / "earthquake_shelter_clean_2.csv",
+    "tsunami_shelters": Path("preprocessing") / "tsunami_shelter_clean_2.csv",
+}
 
-render_page_intro(
-    "2 대피소 추천",
-    "입력 좌표를 기준으로 지역을 자동 감지하고, 현재 데이터 안에서 가까운 대피소 Top 3 를 추천합니다.",
-    "실제 경로 안내가 아니라 직선 거리 기준 추천이며, 지역 감지는 가장 가까운 지역 중심 좌표를 기준으로 동작합니다.",
-)
+SPECIAL_SHELTER_TYPE_LABELS = {
+    "earthquake_shelter_clean_2.csv": "지진대피장소",
+    "tsunami_shelter_clean_2.csv": "해일대피장소",
+}
 
-try:
-    # 추천 페이지는 시작 시점부터 실제 데이터셋에 의존하므로,
-    # 데이터 묶음을 읽지 못하면 나머지 입력 UI 도 의미가 없어 바로 중단한다.
-    bundle = load_dataset_bundle()
-except FileNotFoundError as exc:
-    st.error(str(exc))
-    st.stop()
+RAW_TO_GROUP = {
+    "지진": "지진",
+    "지진해일": "지진해일/쓰나미",
+    "쓰나미": "지진해일/쓰나미",
+    "호우": "호우/태풍",
+    "태풍": "호우/태풍",
+    "강풍": "강풍/풍랑",
+    "풍랑": "강풍/풍랑",
+    "폭염": "폭염",
+    "한파": "한파",
+    "대설": "대설",
+    "건조": "건조",
+}
 
-# 수동 보정 UI 를 열었을 때는 실제 대피소 데이터가 있는 지역만 보여 주는 편이 혼란이 적다.
-regions = get_available_regions(bundle)
-# unique().tolist() 와 비슷하게, dropna().unique().tolist() 는 결측을 빼고 실제 선택 가능한 값만 리스트로 만드는 패턴이다.
-sidos = sorted(regions["시도"].dropna().unique().tolist())
+DEFAULT_DISASTER_OPTIONS = [
+    "호우/태풍",
+    "강풍/풍랑",
+    "폭염",
+    "한파",
+    "대설",
+    "건조",
+    "지진",
+    "지진해일/쓰나미",
+]
 
-st.sidebar.header("추천 조건")
-# 좌표 입력이 지금 페이지의 출발점이므로, 지역보다 먼저 기본 좌표 상태를 잡아 둔다.
-if "recommendation_lat" not in st.session_state:
-    # session_state 는 Streamlit rerun 이 일어나도 값을 잠시 기억하는 저장소다.
-    st.session_state["recommendation_lat"] = 35.1796
-if "recommendation_lon" not in st.session_state:
-    st.session_state["recommendation_lon"] = 129.0756
-if "use_manual_region" not in st.session_state:
-    st.session_state["use_manual_region"] = False
-
-# 아래 버튼은 미래 확장을 위한 자리표시자다.
-# 실제 브라우저 geolocation 연동은 4번 페이지와 서비스 스텁에서만 설명하고, 지금은 실행하지 않는다.
-st.sidebar.button("현재 위치 자동 입력 (준비중)", disabled=True)
-
-selected_latitude = st.sidebar.number_input(
+RECOMMENDATION_RESULT_COLUMNS = [
+    "대피소명",
+    "주소",
+    "대피소유형",
     "위도",
-    min_value=30.0,
-    max_value=45.0,
-    step=0.0001,
-    format="%.6f",
-    key="recommendation_lat",
-)
-selected_longitude = st.sidebar.number_input(
     "경도",
-    min_value=120.0,
-    max_value=140.0,
-    step=0.0001,
-    format="%.6f",
-    key="recommendation_lon",
-)
-# number_input 을 쓰는 이유는 자유 텍스트 입력보다 좌표 범위를 강하게 제한해
-# 거리 계산과 지역 감지 함수에 잘못된 문자열이 들어가는 일을 줄이기 위해서다.
-# key 를 넣어 둔 덕분에 사용자가 입력한 값이 session_state 와 자동으로 연결된다.
+    "시도",
+    "시군구",
+    "수용인원",
+    "수용인원_정렬값",
+    "거리_km",
+    "추천구분",
+    "추천사유",
+]
 
-# 좌표를 먼저 받은 뒤, 가장 가까운 지역 중심을 찾아 현재 화면의 기본 지역으로 사용한다.
-detected_region = infer_region_from_coordinates(
-    bundle,
-    latitude=float(selected_latitude),
-    longitude=float(selected_longitude),
-)
-# detected_region 은 dict 형태라 이후 코드에서 sido/sigungu/distance_km/source 를 이름으로 읽는다.
-detected_sido = str(detected_region["sido"] or sidos[0])
-detected_sigungu_options = get_sigungu_options(bundle, detected_sido)
-detected_sigungu = (
-    str(detected_region["sigungu"])
-    if detected_region["sigungu"] in detected_sigungu_options
-    else detected_sigungu_options[0]
-)
-# 자동 감지된 시군구가 옵션 목록에 없을 때 첫 옵션으로 되돌리는 이유는
-# 데이터 갱신 뒤 옛 세션 상태나 표기 차이로 selectbox 가 깨지는 상황을 막기 위해서다.
+def apply_page_config() -> None:
+    """추천 페이지의 Streamlit 기본 설정을 적용한다."""
 
-# 수동 보정 UI 는 항상 열 수 있지만, 기본값은 현재 감지된 지역을 따라가게 맞춘다.
-if "manual_sido" not in st.session_state or not st.session_state["use_manual_region"]:
-    # 사용자가 아직 수동 보정을 켜지 않았다면 자동 감지 결과를 수동 보정 기본값으로 복사해 둔다.
-    st.session_state["manual_sido"] = detected_sido
-if "manual_sigungu" not in st.session_state or not st.session_state["use_manual_region"]:
-    st.session_state["manual_sigungu"] = detected_sigungu
-if st.session_state["manual_sido"] not in sidos:
-    st.session_state["manual_sido"] = detected_sido
-
-with st.sidebar.expander("지역 직접 수정", expanded=st.session_state["use_manual_region"]):
-    # 자동 감지 기반으로 충분하지 않을 때만 사용자가 시도/시군구를 직접 보정하게 만든다.
-    # expanded=... 는 이 접힘 영역을 처음부터 펼칠지 닫아 둘지를 현재 세션 상태에 맞춰 정한다.
-    st.checkbox("감지 지역 대신 직접 수정", key="use_manual_region")
-    st.selectbox("시도", options=sidos, key="manual_sido")
-
-    manual_sigungu_options = get_sigungu_options(bundle, st.session_state["manual_sido"])
-    # session_state.get(...) 을 쓰면 값이 아직 없는 첫 실행에서도 KeyError 없이 비교할 수 있다.
-    if st.session_state.get("manual_sigungu") not in manual_sigungu_options:
-        # 상위 시도 변경 뒤에도 이전 시군구가 남아 있으면 잘못된 조합이 되므로 현재 시도 기준 첫 옵션으로 맞춘다.
-        st.session_state["manual_sigungu"] = manual_sigungu_options[0]
-
-    st.selectbox("시군구", options=manual_sigungu_options, key="manual_sigungu")
-
-    # 예전의 지역 중심 좌표 버튼은 유지하되, 이제는 수동 보정 지역을 좌표칸으로 반영하는 용도로 쓴다.
-    manual_center_latitude, manual_center_longitude = get_region_center(
-        bundle,
-        st.session_state["manual_sido"],
-        st.session_state["manual_sigungu"],
+    st.set_page_config(
+        page_title=f"{APP_TITLE} | {PAGE_LABEL}",
+        page_icon=APP_ICON,
+        layout="wide",
+        initial_sidebar_state="expanded",
     )
-    if st.button("보정 지역 중심 좌표 불러오기"):
-        if manual_center_latitude is not None and manual_center_longitude is not None:
-            # 세션 상태를 직접 갱신해야 number_input, 특보 요약, 추천 계산이 모두 같은 좌표를 즉시 공유한다.
-            st.session_state["recommendation_lat"] = manual_center_latitude
-            st.session_state["recommendation_lon"] = manual_center_longitude
-            # st.rerun() 은 바뀐 세션 값을 기준으로 스크립트를 처음부터 다시 실행하게 만든다.
-            st.rerun()
 
-# 특보 요약과 추천 후보 필터가 서로 다른 지역을 보지 않도록,
-# 페이지는 항상 하나의 활성 지역(active region)만 골라 아래 서비스들에 공통으로 넘긴다.
-if st.session_state["use_manual_region"]:
-    active_sido = str(st.session_state["manual_sido"])
-    active_sigungu = str(st.session_state["manual_sigungu"])
-    region_source = "manual_override"
-else:
-    active_sido = detected_sido
-    active_sigungu = detected_sigungu
-    region_source = str(detected_region["source"])
-# 여기서 정한 active_* 값이 바로 "활성 지역"이며,
-# 아래 특보 요약, 재난 선택, 추천 계산이 모두 같은 기준을 공유한다.
 
-disaster_options = get_disaster_options(bundle, active_sido, active_sigungu)
-default_disaster = select_priority_disaster(bundle, active_sido, active_sigungu)
-# 기본 재난 선택값도 active region 기준으로 계산해야
-# 자동 감지 지역을 바꿨을 때 특보 요약과 selectbox 초기값이 같은 문맥으로 움직인다.
-selected_disaster = st.sidebar.selectbox(
-    "재난 유형",
-    options=disaster_options,
-    index=disaster_options.index(default_disaster) if default_disaster in disaster_options else 0,
-)
-# index=... 부분은 자동 선택값이 옵션 안에 있을 때만 그 위치를 기본 선택값으로 삼겠다는 뜻이다.
+def render_page_intro(title: str, subtitle: str, caption: str | None = None) -> None:
+    """페이지 상단의 공통 제목 블록을 그린다."""
 
-# 페이지는 계산 로직을 직접 들고 있지 않고, 서비스가 만든 요약/추천 결과를 표시하는 역할에 집중한다.
-alert_summary = build_alert_summary(bundle, active_sido, active_sigungu)
-recent_alerts = get_recent_alerts(bundle, active_sido, active_sigungu, limit=5)
-recommendations = recommend_shelters(
-    bundle=bundle,
-    disaster_group=selected_disaster,
-    latitude=float(selected_latitude),
-    longitude=float(selected_longitude),
-    sido=active_sido,
-    sigungu=active_sigungu,
-)
-# selected_latitude/selected_longitude 는 위젯 값이라 Decimal 같은 다른 타입일 수도 있어,
-# 서비스에 넘기기 전에 float() 로 한 번 명시적으로 맞춰 둔다.
+    st.title(title)
+    st.write(subtitle)
+    if caption:
+        st.caption(caption)
 
-# 상단 KPI 는 현재 선택 기준과 데이터 요약을 한 줄에서 읽게 만드는 상황판이다.
-metric_columns = st.columns(4)
-# st.columns 를 고정 4칸으로 두는 이유는 재난/시각/특보 수/추천 후보 수를 항상 같은 위치에서 비교하게 하기 위해서다.
-metric_columns[0].metric("선택 재난", selected_disaster)
-metric_columns[1].metric("최근 특보 시각", format_datetime(alert_summary["latest_time"]))
-metric_columns[2].metric("최근 확인 특보 수", format_number(alert_summary["alert_count"]))
-metric_columns[3].metric("추천 후보 수", format_number(len(recommendations)))
 
-# 비율 리스트 [1.1, 0.9] 는 왼쪽 요약 칸을 오른쪽 지도 칸보다 조금 더 넓게 배치하겠다는 뜻이다.
-top_left, top_right = st.columns([1.1, 0.9], gap="large")
+def format_number(value: int | float) -> str:
+    """천 단위 구분 기호가 있는 문자열로 바꾼다."""
 
-with top_left:
-    with st.container(border=True):
-        # 이 요약 영역은 좌표 입력이 어떤 지역으로 해석됐는지와,
-        # 그 지역을 기준으로 어떤 특보/재난 흐름이 잡혔는지를 먼저 설명하는 곳이다.
-        st.subheader("현재 좌표 기준 특보 요약")
-        st.markdown(
-            f"- 감지 지역: **{detected_sido} {detected_sigungu}** "
-            f"({format_distance_km(detected_region['distance_km'])} 떨어진 지역 중심 기준)"
+    return f"{float(value):,.0f}"
+
+
+def format_distance_km(value: float | None) -> str:
+    """직선 거리 값을 km 문자열로 바꾼다."""
+
+    if value is None or pd.isna(value):
+        return "-"
+    return f"{float(value):.2f} km"
+
+
+def format_datetime(value: pd.Timestamp | None) -> str:
+    """날짜/시간 값을 화면용 문자열로 바꾼다."""
+
+    if value is None or pd.isna(value):
+        return "-"
+    return pd.Timestamp(value).strftime("%Y-%m-%d %H:%M")
+
+
+def _maybe_get_secret_data_dir() -> str | None:
+    """Streamlit secrets 에 설정된 외부 데이터 경로가 있는지 읽는다."""
+
+    try:
+        if "preprocessing_data_dir" in st.secrets:
+            return str(st.secrets["preprocessing_data_dir"])
+        if "app" in st.secrets and "preprocessing_data_dir" in st.secrets["app"]:
+            return str(st.secrets["app"]["preprocessing_data_dir"])
+    except Exception:
+        return None
+    return None
+
+
+def _get_repo_default_data_dir() -> Path:
+    """저장소에 포함된 기본 전처리 데이터 폴더 경로를 반환한다."""
+
+    return Path(__file__).resolve().parents[1] / "preprocessing_data"
+
+
+def _get_desktop_default_data_dir() -> Path:
+    """기존 로컬 실행 호환용 Desktop 기본 경로를 반환한다."""
+
+    return Path.home() / "Desktop" / "preprocessing_data"
+
+
+def normalize_sigungu_name(value: str | None) -> str:
+    """시군구 명칭을 비교용 문자열로 정규화한다."""
+
+    if value is None or pd.isna(value):
+        return ""
+
+    text = str(value).strip().replace(" ", "")
+    if text.endswith(("시", "군")) and len(text) > 1:
+        return text[:-1]
+    return text
+
+
+def _haversine_km(
+    latitude_a: float,
+    longitude_a: float,
+    latitude_b: float,
+    longitude_b: float,
+) -> float:
+    """두 위경도 사이의 직선 거리를 km 단위로 계산한다."""
+
+    earth_radius_km = 6371.0
+    lat_a = math.radians(latitude_a)
+    lon_a = math.radians(longitude_a)
+    lat_b = math.radians(latitude_b)
+    lon_b = math.radians(longitude_b)
+
+    delta_lat = lat_b - lat_a
+    delta_lon = lon_b - lon_a
+    haversine_value = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat_a) * math.cos(lat_b) * math.sin(delta_lon / 2) ** 2
+    )
+    return earth_radius_km * 2 * math.asin(math.sqrt(haversine_value))
+
+
+def resolve_data_dir(path_override: str | Path | None = None) -> Path:
+    """전처리 데이터 폴더 경로를 결정한다."""
+
+    candidates: list[Path] = []
+    if path_override is not None:
+        candidates.append(Path(path_override))
+
+    env_path = os.environ.get("PREPROCESSING_DATA_DIR")
+    if env_path:
+        candidates.append(Path(env_path))
+
+    secret_path = _maybe_get_secret_data_dir()
+    if secret_path:
+        candidates.append(Path(secret_path))
+
+    candidates.append(_get_repo_default_data_dir())
+    candidates.append(_get_desktop_default_data_dir())
+
+    checked_paths: list[Path] = []
+    for candidate in candidates:
+        resolved = candidate.expanduser().resolve()
+        checked_paths.append(resolved)
+        if resolved.exists():
+            return resolved
+
+    searched = "\n".join(f"- {path}" for path in checked_paths)
+    raise FileNotFoundError(
+        "전처리 데이터 폴더를 찾지 못했다.\n"
+        "기본 실행은 저장소 내부 `preprocessing_data` 폴더를 사용한다.\n"
+        "다음 경로를 차례대로 확인했다:\n"
+        f"{searched}\n"
+        "다른 위치를 쓰려면 환경변수 `PREPROCESSING_DATA_DIR` 또는 "
+        "`.streamlit/secrets.toml` 의 `preprocessing_data_dir` 를 지정해 달라."
+    )
+
+
+def _read_csv(path: Path) -> pd.DataFrame:
+    """UTF-8 기반 전처리 CSV 를 읽는다."""
+
+    try:
+        return pd.read_csv(path, encoding="utf-8-sig")
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"전처리 데이터 파일이 없다: {path}\n"
+            "저장소 기본 데이터(`preprocessing_data/preprocessing/*.csv`)가 모두 있는지 확인하거나 "
+            "다른 위치를 쓰려면 `PREPROCESSING_DATA_DIR` 또는 `.streamlit/secrets.toml` 의 "
+            "`preprocessing_data_dir` 를 지정해 달라."
+        ) from exc
+
+
+def _validate_columns(dataframe: pd.DataFrame, expected_columns: list[str], label: str) -> None:
+    """CSV 에 기대한 컬럼이 모두 있는지 확인한다."""
+
+    missing_columns = [column for column in expected_columns if column not in dataframe.columns]
+    if missing_columns:
+        raise ValueError(f"{label} CSV 에 필요한 컬럼이 없다: {missing_columns}")
+
+
+def _prepare_alerts(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """재난 특보 DataFrame 을 추천 페이지 공통 형식으로 정리한다."""
+
+    _validate_columns(dataframe, ALERT_COLUMNS, "danger_clean.csv")
+
+    alerts = dataframe.copy()
+    alerts["발표시간"] = pd.to_datetime(alerts["발표시간"], errors="coerce")
+    alerts["지역"] = alerts["지역"].astype(str).str.strip()
+    alerts["시군구"] = alerts["시군구"].astype(str).str.strip()
+    alerts["시군구정규화"] = alerts["시군구"].map(normalize_sigungu_name)
+    alerts["재난종류"] = alerts["재난종류"].astype(str).str.strip()
+    alerts["특보등급"] = alerts["특보등급"].fillna("미분류").astype(str).str.strip()
+    return alerts.dropna(subset=["발표시간"]).sort_values("발표시간").reset_index(drop=True)
+
+
+def _prepare_shelters(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """통합/일반 대피장소 DataFrame 을 추천과 분석에서 쓰기 좋게 정리한다."""
+
+    _validate_columns(dataframe, SHELTER_COLUMNS, "final_shelter_dataset.csv")
+
+    shelters = dataframe.copy()
+    shelters["위도"] = pd.to_numeric(shelters["위도"], errors="coerce")
+    shelters["경도"] = pd.to_numeric(shelters["경도"], errors="coerce")
+    shelters["수용인원"] = pd.to_numeric(shelters["수용인원"], errors="coerce")
+    shelters["시도"] = shelters["시도"].astype(str).str.strip()
+    shelters["시군구"] = shelters["시군구"].astype(str).str.strip()
+    shelters["시군구정규화"] = shelters["시군구"].map(normalize_sigungu_name)
+    shelters["대피소유형"] = shelters["대피소유형"].fillna("미분류").astype(str).str.strip()
+    shelters["수용인원_정렬값"] = shelters["수용인원"].fillna(0)
+    return shelters.dropna(subset=["위도", "경도"]).reset_index(drop=True)
+
+
+def _prepare_special_shelters(
+    dataframe: pd.DataFrame,
+    expected_columns: list[str],
+    label: str,
+) -> pd.DataFrame:
+    """지진/해일 전용 대피장소 DataFrame 을 통합 대피소와 비슷한 형식으로 맞춘다."""
+
+    _validate_columns(dataframe, expected_columns, label)
+
+    shelters = dataframe.copy()
+    shelters["위도"] = pd.to_numeric(shelters["위도"], errors="coerce")
+    shelters["경도"] = pd.to_numeric(shelters["경도"], errors="coerce")
+    shelters["수용인원"] = pd.to_numeric(shelters["수용인원"], errors="coerce")
+    shelters["시도"] = shelters["시도"].astype(str).str.strip()
+    shelters["시군구"] = shelters["시군구"].astype(str).str.strip()
+    shelters["시군구정규화"] = shelters["시군구"].map(normalize_sigungu_name)
+    if "지역" not in shelters.columns:
+        shelters["지역"] = shelters["시도"] + " " + shelters["시군구"]
+    shelters["지역"] = shelters["지역"].fillna(shelters["시도"] + " " + shelters["시군구"])
+    shelters["대피소유형"] = SPECIAL_SHELTER_TYPE_LABELS[label]
+    shelters["수용인원_정렬값"] = shelters["수용인원"].fillna(0)
+    return shelters.dropna(subset=["위도", "경도"]).reset_index(drop=True)
+
+
+def load_alerts_dataframe_uncached(path_override: str | Path | None = None) -> pd.DataFrame:
+    """전처리 폴더에서 재난 특보 DataFrame 을 읽는다."""
+
+    data_dir = resolve_data_dir(path_override)
+    return _prepare_alerts(_read_csv(data_dir / DATASET_FILE_MAP["alerts"]))
+
+
+@st.cache_data(show_spinner=False)
+def load_alerts_dataframe(path_override: str | None = None) -> pd.DataFrame:
+    """Streamlit rerun 시 재난 특보 CSV 재로딩을 줄이기 위한 캐시 래퍼."""
+
+    return load_alerts_dataframe_uncached(path_override)
+
+
+def load_shelters_dataframe_uncached(path_override: str | Path | None = None) -> pd.DataFrame:
+    """전처리 폴더에서 통합 대피소 DataFrame 을 읽는다."""
+
+    data_dir = resolve_data_dir(path_override)
+    return _prepare_shelters(_read_csv(data_dir / DATASET_FILE_MAP["shelters"]))
+
+
+@st.cache_data(show_spinner=False)
+def load_shelters_dataframe(path_override: str | None = None) -> pd.DataFrame:
+    """Streamlit rerun 시 통합 대피소 CSV 재로딩을 줄이기 위한 캐시 래퍼."""
+
+    return load_shelters_dataframe_uncached(path_override)
+
+
+def load_earthquake_shelters_dataframe_uncached(
+    path_override: str | Path | None = None,
+) -> pd.DataFrame:
+    """전처리 폴더에서 지진 전용 대피소 DataFrame 을 읽는다."""
+
+    data_dir = resolve_data_dir(path_override)
+    return _prepare_special_shelters(
+        _read_csv(data_dir / DATASET_FILE_MAP["earthquake_shelters"]),
+        EARTHQUAKE_COLUMNS,
+        "earthquake_shelter_clean_2.csv",
+    )
+
+
+@st.cache_data(show_spinner=False)
+def load_earthquake_shelters_dataframe(path_override: str | None = None) -> pd.DataFrame:
+    """Streamlit rerun 시 지진 전용 대피소 CSV 재로딩을 줄이기 위한 캐시 래퍼."""
+
+    return load_earthquake_shelters_dataframe_uncached(path_override)
+
+
+def load_tsunami_shelters_dataframe_uncached(
+    path_override: str | Path | None = None,
+) -> pd.DataFrame:
+    """전처리 폴더에서 해일 전용 대피소 DataFrame 을 읽는다."""
+
+    data_dir = resolve_data_dir(path_override)
+    return _prepare_special_shelters(
+        _read_csv(data_dir / DATASET_FILE_MAP["tsunami_shelters"]),
+        TSUNAMI_COLUMNS,
+        "tsunami_shelter_clean_2.csv",
+    )
+
+
+@st.cache_data(show_spinner=False)
+def load_tsunami_shelters_dataframe(path_override: str | None = None) -> pd.DataFrame:
+    """Streamlit rerun 시 해일 전용 대피소 CSV 재로딩을 줄이기 위한 캐시 래퍼."""
+
+    return load_tsunami_shelters_dataframe_uncached(path_override)
+
+
+def get_available_regions(shelters_frame: pd.DataFrame) -> pd.DataFrame:
+    """통합 대피장소 기준으로 사용 가능한 시도/시군구 목록을 반환한다."""
+
+    return (
+        shelters_frame[["시도", "시군구"]]
+        .drop_duplicates()
+        .sort_values(["시도", "시군구"])
+        .reset_index(drop=True)
+    )
+
+
+def _build_region_centers(shelters_frame: pd.DataFrame) -> pd.DataFrame:
+    """통합 대피소 기준 지역 중심 좌표 표를 만든다."""
+
+    return (
+        shelters_frame.groupby(["시도", "시군구", "시군구정규화"], as_index=False)
+        .agg(
+            중심위도=("위도", "mean"),
+            중심경도=("경도", "mean"),
+            대피소수=("대피소명", "size"),
         )
-        if region_source == "manual_override":
-            st.markdown(f"- 보정 지역: **{active_sido} {active_sigungu}**")
-        else:
-            st.markdown(f"- 활성 지역: **{active_sido} {active_sigungu}**")
-        # 감지 지역과 활성 지역을 나눠 보여 주는 이유는
-        # 자동 추정 결과를 썼는지, 사용자가 직접 바꿨는지를 사용자가 스스로 검증할 수 있게 하기 위해서다.
+        .sort_values(["시도", "시군구"])
+        .reset_index(drop=True)
+    )
 
-        if alert_summary["hazards"]:
-            st.markdown("- 최근 특보 유형: " + ", ".join(alert_summary["hazards"]))
-        else:
-            st.markdown("- 최근 특보 데이터가 없어 수동 선택 재난 기준으로만 추천한다.")
-        st.markdown(
-            f"- 입력 좌표: **{selected_latitude:.4f}, {selected_longitude:.4f}**"
-        )
-        st.caption(
-            "현재 지역 감지는 행정경계 기반이 아니라 가장 가까운 지역 중심 좌표 기준이다. "
-            "감지 결과가 애매하면 사이드바의 `지역 직접 수정` 에서 보정할 수 있다."
-        )
-        if detected_region["distance_km"] is not None and float(detected_region["distance_km"]) > 40:
-            st.warning("현재 좌표와 감지된 지역 중심 거리가 멀다. 필요하면 지역 직접 수정으로 보정해 달라.")
 
-    # 카드 영역은 상위 후보를 빠르게 훑는 요약용 UI 다.
-    render_recommendation_cards(recommendations)
+def infer_region_from_coordinates(
+    shelters_frame: pd.DataFrame,
+    latitude: float,
+    longitude: float,
+) -> dict[str, object]:
+    """입력 좌표와 가장 가까운 지역 중심을 찾아 시도/시군구를 추정한다."""
 
-with top_right:
-    with st.container(border=True):
-        st.subheader("추천 지도")
-        render_recommendation_map(
-            user_latitude=float(selected_latitude),
-            user_longitude=float(selected_longitude),
-            recommendations=recommendations,
-            height=470,
-        )
-        st.caption("지도 위 선은 직선 거리 기준 연결선이며 실제 도로 경로를 의미하지 않는다.")
+    region_centers = _build_region_centers(shelters_frame)
+    if region_centers.empty:
+        return {
+            "sido": None,
+            "sigungu": None,
+            "distance_km": None,
+            "source": "auto_detected",
+        }
 
-st.divider()
+    scored = region_centers.copy()
+    scored["distance_km"] = scored.apply(
+        lambda row: _haversine_km(
+            latitude,
+            longitude,
+            float(row["중심위도"]),
+            float(row["중심경도"]),
+        ),
+        axis=1,
+    )
+    scored = scored.sort_values(["distance_km", "대피소수"], ascending=[True, False]).reset_index(
+        drop=True
+    )
+    nearest = scored.iloc[0]
+    return {
+        "sido": str(nearest["시도"]),
+        "sigungu": str(nearest["시군구"]),
+        "distance_km": float(nearest["distance_km"]),
+        "source": "auto_detected",
+    }
 
-table_left, table_right = st.columns([0.95, 1.05], gap="large")
 
-with table_left:
-    with st.container(border=True):
-        st.subheader("최근 특보 이력")
-        if recent_alerts.empty:
-            st.info("선택한 지역에서 바로 보여줄 최근 특보 이력이 없다.")
-        else:
-            alert_display = recent_alerts.copy()
-            # 원본 Timestamp 는 표에서 너무 길게 보일 수 있어, 근거 표에서는 사람이 읽기 좋은 문자열로만 바꾼다.
-            # copy() 를 쓰기 때문에 표 표시용 문자열 변환이 원본 recent_alerts 를 바꾸지 않는다.
-            alert_display["발표시간"] = alert_display["발표시간"].dt.strftime("%Y-%m-%d %H:%M")
-            st.dataframe(
-                alert_display[["발표시간", "지역", "시군구", "재난종류", "특보등급"]],
-                use_container_width=True,
-                hide_index=True,
+def get_sigungu_options(shelters_frame: pd.DataFrame, sido: str) -> list[str]:
+    """선택한 시도 안에서 사용 가능한 시군구 목록을 반환한다."""
+
+    filtered = shelters_frame[shelters_frame["시도"] == sido]
+    return sorted(filtered["시군구"].dropna().unique().tolist())
+
+
+def get_region_center(
+    shelters_frame: pd.DataFrame,
+    sido: str,
+    sigungu: str,
+) -> tuple[float | None, float | None]:
+    """선택한 지역의 평균 좌표를 반환한다."""
+
+    region_centers = _build_region_centers(shelters_frame)
+    filtered = region_centers[
+        (region_centers["시도"] == sido)
+        & (region_centers["시군구정규화"] == normalize_sigungu_name(sigungu))
+    ]
+    if filtered.empty:
+        filtered = region_centers[region_centers["시도"] == sido]
+    if filtered.empty:
+        return None, None
+
+    return float(filtered["중심위도"].mean()), float(filtered["중심경도"].mean())
+
+
+def get_recent_alerts(
+    alerts_frame: pd.DataFrame,
+    sido: str,
+    sigungu: str | None = None,
+    limit: int = 5,
+) -> pd.DataFrame:
+    """선택 지역 기준의 최근 특보 이력 일부를 반환한다."""
+
+    filtered = alerts_frame[alerts_frame["지역"] == sido]
+    if sigungu:
+        filtered = filtered[filtered["시군구정규화"] == normalize_sigungu_name(sigungu)]
+        if filtered.empty:
+            filtered = alerts_frame[alerts_frame["지역"] == sido]
+
+    return filtered.sort_values("발표시간", ascending=False).head(limit).reset_index(drop=True)
+
+
+def build_alert_summary(
+    alerts_frame: pd.DataFrame,
+    sido: str,
+    sigungu: str | None = None,
+) -> dict[str, object]:
+    """추천 페이지 상단에 보여줄 최근 특보 요약 정보를 만든다."""
+
+    recent_alerts = get_recent_alerts(alerts_frame, sido=sido, sigungu=sigungu, limit=5)
+    if recent_alerts.empty:
+        return {
+            "latest_time": None,
+            "latest_disaster": None,
+            "alert_count": 0,
+            "hazards": [],
+        }
+
+    return {
+        "latest_time": pd.Timestamp(recent_alerts.iloc[0]["발표시간"]),
+        "latest_disaster": str(recent_alerts.iloc[0]["재난종류"]),
+        "alert_count": int(len(recent_alerts)),
+        "hazards": recent_alerts["재난종류"].dropna().astype(str).unique().tolist(),
+    }
+
+
+def classify_disaster_type(disaster_name: str | None) -> str:
+    """원본 재난 명칭을 내부 그룹으로 정규화한다."""
+
+    if disaster_name is None:
+        return "기타"
+
+    text = str(disaster_name).strip()
+    return RAW_TO_GROUP.get(text, text if text in DEFAULT_DISASTER_OPTIONS else "기타")
+
+
+def get_disaster_options(alerts_frame: pd.DataFrame, sido: str, sigungu: str) -> list[str]:
+    """활성 지역의 최근 특보와 기본 목록을 합쳐 재난 선택 옵션을 만든다."""
+
+    recent_alerts = get_recent_alerts(alerts_frame, sido=sido, sigungu=sigungu, limit=10)
+    options = [classify_disaster_type(value) for value in recent_alerts["재난종류"].tolist()]
+    options.extend(DEFAULT_DISASTER_OPTIONS)
+
+    deduplicated: list[str] = []
+    for item in options:
+        if item not in deduplicated:
+            deduplicated.append(item)
+    return deduplicated
+
+
+def select_priority_disaster(alerts_frame: pd.DataFrame, sido: str, sigungu: str) -> str:
+    """최근 특보를 기준으로 기본 선택 재난 그룹을 정한다."""
+
+    summary = build_alert_summary(alerts_frame, sido=sido, sigungu=sigungu)
+    latest_disaster = summary["latest_disaster"]
+    if latest_disaster:
+        return classify_disaster_type(str(latest_disaster))
+    return DEFAULT_DISASTER_OPTIONS[0]
+
+
+def haversine_km(
+    latitude_a: float,
+    longitude_a: float,
+    latitude_b: float,
+    longitude_b: float,
+) -> float:
+    """두 위경도 사이의 직선 거리를 km 단위로 계산한다."""
+
+    earth_radius_km = 6371.0
+    lat_a = math.radians(latitude_a)
+    lon_a = math.radians(longitude_a)
+    lat_b = math.radians(latitude_b)
+    lon_b = math.radians(longitude_b)
+
+    delta_lat = lat_b - lat_a
+    delta_lon = lon_b - lon_a
+    haversine_value = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat_a) * math.cos(lat_b) * math.sin(delta_lon / 2) ** 2
+    )
+    return earth_radius_km * 2 * math.asin(math.sqrt(haversine_value))
+
+
+def _filter_by_region(dataframe: pd.DataFrame, sido: str, sigungu: str) -> pd.DataFrame:
+    """시군구 우선, 없으면 시도 기준으로 후보 범위를 조정한다."""
+
+    normalized_sigungu = normalize_sigungu_name(sigungu)
+    local = dataframe[
+        (dataframe["시도"] == sido) & (dataframe["시군구정규화"] == normalized_sigungu)
+    ]
+    if not local.empty:
+        return local.copy()
+
+    regional = dataframe[dataframe["시도"] == sido]
+    if not regional.empty:
+        return regional.copy()
+
+    return dataframe.copy()
+
+
+def _build_primary_candidates(
+    shelters_frame: pd.DataFrame,
+    earthquake_shelters_frame: pd.DataFrame,
+    tsunami_shelters_frame: pd.DataFrame,
+    disaster_group: str,
+    sido: str,
+    sigungu: str,
+) -> tuple[pd.DataFrame, str]:
+    """재난 그룹에 맞는 전용 후보 집합을 고른다."""
+
+    if disaster_group == "지진":
+        return _filter_by_region(earthquake_shelters_frame, sido, sigungu), "전용 대피소"
+    if disaster_group == "지진해일/쓰나미":
+        return _filter_by_region(tsunami_shelters_frame, sido, sigungu), "전용 대피소"
+    if disaster_group == "폭염":
+        filtered = shelters_frame[shelters_frame["대피소유형"].str.contains("무더위쉼터", na=False)]
+        return _filter_by_region(filtered, sido, sigungu), "전용 대피소"
+    if disaster_group == "한파":
+        filtered = shelters_frame[shelters_frame["대피소유형"].str.contains("한파쉼터", na=False)]
+        return _filter_by_region(filtered, sido, sigungu), "전용 대피소"
+
+    return pd.DataFrame(), "기본 대피소"
+
+
+def _build_fallback_candidates(
+    shelters_frame: pd.DataFrame,
+    sido: str,
+    sigungu: str,
+) -> pd.DataFrame:
+    """전용 후보가 없거나 부족할 때 사용할 통합/일반 대피장소 후보를 만든다."""
+
+    return _filter_by_region(shelters_frame, sido, sigungu)
+
+
+def _score_candidates(
+    dataframe: pd.DataFrame,
+    latitude: float,
+    longitude: float,
+    recommendation_type: str,
+    disaster_group: str,
+    reason_prefix: str,
+) -> pd.DataFrame:
+    """후보 대피장소에 거리와 설명 컬럼을 붙여 정렬 가능한 형태로 만든다."""
+
+    if dataframe.empty:
+        return dataframe.copy()
+
+    scored = dataframe.copy()
+    scored["거리_km"] = scored.apply(
+        lambda row: haversine_km(latitude, longitude, float(row["위도"]), float(row["경도"])),
+        axis=1,
+    )
+    scored["추천구분"] = recommendation_type
+    scored["추천사유"] = (
+        reason_prefix + disaster_group + " 상황에서 현재 좌표 기준으로 가까운 후보를 우선 정렬했다."
+    )
+    scored["수용인원_정렬값"] = pd.to_numeric(scored["수용인원_정렬값"], errors="coerce").fillna(0)
+    return scored
+
+
+def _ensure_result_columns(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """추천 결과가 항상 같은 표준 컬럼 집합을 가지도록 맞춘다."""
+
+    ensured = dataframe.copy()
+    default_values = {
+        "대피소명": "",
+        "주소": "",
+        "대피소유형": "미분류",
+        "위도": pd.NA,
+        "경도": pd.NA,
+        "시도": "",
+        "시군구": "",
+        "수용인원": pd.NA,
+        "수용인원_정렬값": 0,
+        "거리_km": pd.NA,
+        "추천구분": "",
+        "추천사유": "",
+    }
+
+    for column, default_value in default_values.items():
+        if column not in ensured.columns:
+            ensured[column] = default_value
+
+    return ensured[RECOMMENDATION_RESULT_COLUMNS]
+
+
+def recommend_shelters(
+    shelters_frame: pd.DataFrame,
+    earthquake_shelters_frame: pd.DataFrame,
+    tsunami_shelters_frame: pd.DataFrame,
+    disaster_group: str,
+    latitude: float,
+    longitude: float,
+    sido: str,
+    sigungu: str,
+    top_n: int = 3,
+) -> pd.DataFrame:
+    """사용자 좌표 기준 추천 대피장소 Top N 을 반환한다."""
+
+    primary_candidates, primary_label = _build_primary_candidates(
+        shelters_frame=shelters_frame,
+        earthquake_shelters_frame=earthquake_shelters_frame,
+        tsunami_shelters_frame=tsunami_shelters_frame,
+        disaster_group=disaster_group,
+        sido=sido,
+        sigungu=sigungu,
+    )
+    scored_frames: list[pd.DataFrame] = []
+
+    if not primary_candidates.empty:
+        scored_frames.append(
+            _score_candidates(
+                dataframe=primary_candidates,
+                latitude=latitude,
+                longitude=longitude,
+                recommendation_type=primary_label,
+                disaster_group=disaster_group,
+                reason_prefix="재난 그룹에 맞는 전용 후보를 먼저 조회했고, ",
             )
+        )
 
-with table_right:
-    with st.container(border=True):
-        st.subheader("추천 결과 표")
-        if recommendations.empty:
-            st.warning("현재 조건에서는 추천할 대피소가 없다. 지역이나 좌표를 조정해 달라.")
-        else:
-            display_frame = recommendations.copy()
-            # 서비스가 표준 컬럼을 보장하므로, 페이지는 여기서 화면용 문자열만 덧입혀 렌더링한다.
-            display_frame["거리"] = display_frame["거리_km"].map(format_distance_km)
-            # 수용인원 원문 대신 정렬용 숫자 컬럼을 쓰는 이유는
-            # 전용/통합 CSV 차이와 상관없이 이미 숫자로 정리된 값을 공통으로 사용하기 위해서다.
-            # map(lambda ...) 는 각 셀 값을 하나씩 받아 사람이 읽는 문자열로 바꾸는 열 단위 변환이다.
-            display_frame["수용인원"] = display_frame["수용인원_정렬값"].map(
-                lambda value: f"{format_number(value)}명"
+    needs_fallback = disaster_group in {"호우/태풍", "강풍/풍랑", "대설", "건조", "기타"}
+    if needs_fallback or len(primary_candidates) < top_n:
+        fallback_candidates = _build_fallback_candidates(
+            shelters_frame,
+            sido=sido,
+            sigungu=sigungu,
+        )
+        fallback_type = "기본 대피소" if needs_fallback and primary_candidates.empty else "대체 대피소"
+        scored_frames.append(
+            _score_candidates(
+                dataframe=fallback_candidates,
+                latitude=latitude,
+                longitude=longitude,
+                recommendation_type=fallback_type,
+                disaster_group=disaster_group,
+                reason_prefix="전용 후보만으로는 부족하거나 전용 정의가 없어 통합 대피장소를 함께 조회했고, ",
             )
-            st.dataframe(
-                display_frame[
-                    ["대피소명", "추천구분", "대피소유형", "거리", "수용인원", "주소", "추천사유"]
-                ],
-                use_container_width=True,
-                hide_index=True,
+        )
+
+    if not scored_frames:
+        return pd.DataFrame(columns=RECOMMENDATION_RESULT_COLUMNS)
+
+    combined = pd.concat(scored_frames, ignore_index=True)
+    combined = combined.drop_duplicates(subset=["대피소명", "주소"])
+
+    priority_order = {"전용 대피소": 0, "기본 대피소": 1, "대체 대피소": 2}
+    combined["추천우선순위"] = combined["추천구분"].map(priority_order).fillna(9)
+    combined = combined.sort_values(
+        ["추천우선순위", "거리_km", "수용인원_정렬값"],
+        ascending=[True, True, False],
+    )
+    standardized = _ensure_result_columns(combined)
+    return standardized.head(top_n).reset_index(drop=True)
+
+
+def render_recommendation_cards(recommendations: pd.DataFrame) -> None:
+    """추천 결과를 카드 3장 형태로 보여준다."""
+
+    if recommendations.empty:
+        st.info("현재 조건으로 보여줄 추천 대피소가 없다.")
+        return
+
+    columns = st.columns(min(len(recommendations), 3))
+    for index, (_, row) in enumerate(recommendations.iterrows()):
+        with columns[index]:
+            with st.container(border=True):
+                st.subheader(f"Top {index + 1}. {row['대피소명']}")
+                st.markdown(f"**구분**: {row['추천구분']}")
+                st.markdown(f"**직선 거리**: {format_distance_km(row['거리_km'])}")
+                st.markdown(f"**대피소 유형**: {row['대피소유형']}")
+                st.markdown(f"**수용인원**: {format_number(row['수용인원_정렬값'])}명")
+                st.markdown(f"**주소**: {row['주소']}")
+                st.caption(row["추천사유"])
+
+
+def _get_marker_color(recommendation_type: str) -> str:
+    """추천 구분에 따라 지도 마커 색을 고른다."""
+
+    if recommendation_type == "전용 대피소":
+        return "#0f766e"
+    if recommendation_type == "대체 대피소":
+        return "#f59e0b"
+    return "#1d4ed8"
+
+
+def build_recommendation_map(
+    user_latitude: float,
+    user_longitude: float,
+    recommendations: pd.DataFrame,
+) -> folium.Map:
+    """사용자 위치와 추천 대피소를 함께 표시하는 folium 지도를 만든다."""
+
+    map_object = folium.Map(
+        location=[user_latitude, user_longitude],
+        zoom_start=11,
+        tiles="OpenStreetMap",
+        control_scale=True,
+    )
+
+    folium.CircleMarker(
+        location=[user_latitude, user_longitude],
+        radius=7,
+        color="#dc2626",
+        fill=True,
+        fill_color="#dc2626",
+        fill_opacity=0.95,
+        tooltip="사용자 위치",
+    ).add_to(map_object)
+
+    bounds = [[user_latitude, user_longitude]]
+    for row in recommendations.to_dict(orient="records"):
+        shelter_latitude = float(row["위도"])
+        shelter_longitude = float(row["경도"])
+        color = _get_marker_color(str(row["추천구분"]))
+
+        folium.CircleMarker(
+            location=[shelter_latitude, shelter_longitude],
+            radius=5,
+            color=color,
+            fill=True,
+            fill_color=color,
+            fill_opacity=0.9,
+            tooltip=f"{row['대피소명']} ({row['추천구분']})",
+        ).add_to(map_object)
+
+        folium.PolyLine(
+            locations=[[user_latitude, user_longitude], [shelter_latitude, shelter_longitude]],
+            color=color,
+            weight=2,
+            opacity=0.75,
+            dash_array="5 6",
+        ).add_to(map_object)
+
+        bounds.append([shelter_latitude, shelter_longitude])
+
+    if len(bounds) > 1:
+        map_object.fit_bounds(bounds, padding=(30, 30))
+
+    return map_object
+
+
+def render_recommendation_map(
+    user_latitude: float,
+    user_longitude: float,
+    recommendations: pd.DataFrame,
+    height: int = 460,
+) -> None:
+    """folium 지도를 Streamlit HTML 블록으로 렌더링한다."""
+
+    map_object = build_recommendation_map(
+        user_latitude=user_latitude,
+        user_longitude=user_longitude,
+        recommendations=recommendations,
+    )
+    components.html(map_object._repr_html_(), height=height)
+
+
+def render_page() -> None:
+    """추천 페이지를 렌더링한다."""
+
+    apply_page_config()
+
+    render_page_intro(
+        "2 대피소 추천",
+        "입력 좌표를 기준으로 지역을 자동 감지하고, 현재 데이터 안에서 가까운 대피소 Top 3 를 추천합니다.",
+        "실제 경로 안내가 아니라 직선 거리 기준 추천이며, 지역 감지는 가장 가까운 지역 중심 좌표를 기준으로 동작합니다.",
+    )
+
+    try:
+        alerts_frame = load_alerts_dataframe()
+        shelters_frame = load_shelters_dataframe()
+        earthquake_shelters_frame = load_earthquake_shelters_dataframe()
+        tsunami_shelters_frame = load_tsunami_shelters_dataframe()
+    except FileNotFoundError as exc:
+        st.error(str(exc))
+        st.stop()
+
+    regions = get_available_regions(shelters_frame)
+    sidos = sorted(regions["시도"].dropna().unique().tolist())
+
+    st.sidebar.header("추천 조건")
+    if "recommendation_lat" not in st.session_state:
+        st.session_state["recommendation_lat"] = 35.1796
+    if "recommendation_lon" not in st.session_state:
+        st.session_state["recommendation_lon"] = 129.0756
+    if "use_manual_region" not in st.session_state:
+        st.session_state["use_manual_region"] = False
+
+    st.sidebar.button("현재 위치 자동 입력 (준비중)", disabled=True)
+
+    selected_latitude = st.sidebar.number_input(
+        "위도",
+        min_value=30.0,
+        max_value=45.0,
+        step=0.0001,
+        format="%.6f",
+        key="recommendation_lat",
+    )
+    selected_longitude = st.sidebar.number_input(
+        "경도",
+        min_value=120.0,
+        max_value=140.0,
+        step=0.0001,
+        format="%.6f",
+        key="recommendation_lon",
+    )
+
+    detected_region = infer_region_from_coordinates(
+        shelters_frame,
+        latitude=float(selected_latitude),
+        longitude=float(selected_longitude),
+    )
+    detected_sido = str(detected_region["sido"] or sidos[0])
+    detected_sigungu_options = get_sigungu_options(shelters_frame, detected_sido)
+    detected_sigungu = (
+        str(detected_region["sigungu"])
+        if detected_region["sigungu"] in detected_sigungu_options
+        else detected_sigungu_options[0]
+    )
+
+    if "manual_sido" not in st.session_state or not st.session_state["use_manual_region"]:
+        st.session_state["manual_sido"] = detected_sido
+    if "manual_sigungu" not in st.session_state or not st.session_state["use_manual_region"]:
+        st.session_state["manual_sigungu"] = detected_sigungu
+    if st.session_state["manual_sido"] not in sidos:
+        st.session_state["manual_sido"] = detected_sido
+
+    with st.sidebar.expander("지역 직접 수정", expanded=st.session_state["use_manual_region"]):
+        st.checkbox("감지 지역 대신 직접 수정", key="use_manual_region")
+        st.selectbox("시도", options=sidos, key="manual_sido")
+
+        manual_sigungu_options = get_sigungu_options(shelters_frame, st.session_state["manual_sido"])
+        if st.session_state.get("manual_sigungu") not in manual_sigungu_options:
+            st.session_state["manual_sigungu"] = manual_sigungu_options[0]
+
+        st.selectbox("시군구", options=manual_sigungu_options, key="manual_sigungu")
+
+        manual_center_latitude, manual_center_longitude = get_region_center(
+            shelters_frame,
+            st.session_state["manual_sido"],
+            st.session_state["manual_sigungu"],
+        )
+        if st.button("보정 지역 중심 좌표 불러오기"):
+            if manual_center_latitude is not None and manual_center_longitude is not None:
+                st.session_state["recommendation_lat"] = manual_center_latitude
+                st.session_state["recommendation_lon"] = manual_center_longitude
+                st.rerun()
+
+    if st.session_state["use_manual_region"]:
+        active_sido = str(st.session_state["manual_sido"])
+        active_sigungu = str(st.session_state["manual_sigungu"])
+        region_source = "manual_override"
+    else:
+        active_sido = detected_sido
+        active_sigungu = detected_sigungu
+        region_source = str(detected_region["source"])
+
+    disaster_options = get_disaster_options(alerts_frame, active_sido, active_sigungu)
+    default_disaster = select_priority_disaster(alerts_frame, active_sido, active_sigungu)
+    selected_disaster = st.sidebar.selectbox(
+        "재난 유형",
+        options=disaster_options,
+        index=disaster_options.index(default_disaster) if default_disaster in disaster_options else 0,
+    )
+
+    alert_summary = build_alert_summary(alerts_frame, active_sido, active_sigungu)
+    recent_alerts = get_recent_alerts(alerts_frame, active_sido, active_sigungu, limit=5)
+    recommendations = recommend_shelters(
+        shelters_frame=shelters_frame,
+        earthquake_shelters_frame=earthquake_shelters_frame,
+        tsunami_shelters_frame=tsunami_shelters_frame,
+        disaster_group=selected_disaster,
+        latitude=float(selected_latitude),
+        longitude=float(selected_longitude),
+        sido=active_sido,
+        sigungu=active_sigungu,
+    )
+
+    metric_columns = st.columns(4)
+    metric_columns[0].metric("선택 재난", selected_disaster)
+    metric_columns[1].metric("최근 특보 시각", format_datetime(alert_summary["latest_time"]))
+    metric_columns[2].metric("최근 확인 특보 수", format_number(alert_summary["alert_count"]))
+    metric_columns[3].metric("추천 후보 수", format_number(len(recommendations)))
+
+    top_left, top_right = st.columns([1.1, 0.9], gap="large")
+
+    with top_left:
+        with st.container(border=True):
+            st.subheader("현재 좌표 기준 특보 요약")
+            st.markdown(
+                f"- 감지 지역: **{detected_sido} {detected_sigungu}** "
+                f"({format_distance_km(detected_region['distance_km'])} 떨어진 지역 중심 기준)"
             )
+            if region_source == "manual_override":
+                st.markdown(f"- 보정 지역: **{active_sido} {active_sigungu}**")
+            else:
+                st.markdown(f"- 활성 지역: **{active_sido} {active_sigungu}**")
+
+            if alert_summary["hazards"]:
+                st.markdown("- 최근 특보 유형: " + ", ".join(alert_summary["hazards"]))
+            else:
+                st.markdown("- 최근 특보 데이터가 없어 수동 선택 재난 기준으로만 추천한다.")
+            st.markdown(f"- 입력 좌표: **{selected_latitude:.4f}, {selected_longitude:.4f}**")
+            st.caption(
+                "현재 지역 감지는 행정경계 기반이 아니라 가장 가까운 지역 중심 좌표 기준이다. "
+                "감지 결과가 애매하면 사이드바의 `지역 직접 수정` 에서 보정할 수 있다."
+            )
+            if detected_region["distance_km"] is not None and float(detected_region["distance_km"]) > 40:
+                st.warning("현재 좌표와 감지된 지역 중심 거리가 멀다. 필요하면 지역 직접 수정으로 보정해 달라.")
+
+        render_recommendation_cards(recommendations)
+
+    with top_right:
+        with st.container(border=True):
+            st.subheader("추천 지도")
+            render_recommendation_map(
+                user_latitude=float(selected_latitude),
+                user_longitude=float(selected_longitude),
+                recommendations=recommendations,
+                height=470,
+            )
+            st.caption("지도 위 선은 직선 거리 기준 연결선이며 실제 도로 경로를 의미하지 않는다.")
+
+    st.divider()
+
+    table_left, table_right = st.columns([0.95, 1.05], gap="large")
+
+    with table_left:
+        with st.container(border=True):
+            st.subheader("최근 특보 이력")
+            if recent_alerts.empty:
+                st.info("선택한 지역에서 바로 보여줄 최근 특보 이력이 없다.")
+            else:
+                alert_display = recent_alerts.copy()
+                alert_display["발표시간"] = alert_display["발표시간"].dt.strftime("%Y-%m-%d %H:%M")
+                st.dataframe(
+                    alert_display[["발표시간", "지역", "시군구", "재난종류", "특보등급"]],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+    with table_right:
+        with st.container(border=True):
+            st.subheader("추천 결과 표")
+            if recommendations.empty:
+                st.warning("현재 조건에서는 추천할 대피소가 없다. 지역이나 좌표를 조정해 달라.")
+            else:
+                display_frame = recommendations.copy()
+                display_frame["거리"] = display_frame["거리_km"].map(format_distance_km)
+                display_frame["수용인원"] = display_frame["수용인원_정렬값"].map(
+                    lambda value: f"{format_number(value)}명"
+                )
+                st.dataframe(
+                    display_frame[
+                        ["대피소명", "추천구분", "대피소유형", "거리", "수용인원", "주소", "추천사유"]
+                    ],
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+
+if os.environ.get("PROJECT_DASHBOARD_IMPORT_ONLY") != "1":
+    render_page()
