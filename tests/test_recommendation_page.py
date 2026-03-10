@@ -169,6 +169,28 @@ def test_classify_disaster_type_maps_known_labels(recommendation_page_module) ->
     assert recommendation_page_module.classify_disaster_type("풍랑") == "강풍/풍랑"
     assert recommendation_page_module.classify_disaster_type("호우") == "호우/태풍"
     assert recommendation_page_module.classify_disaster_type("폭염") == "폭염"
+    assert recommendation_page_module.classify_disaster_type("지진해일") == "해일/쓰나미"
+    assert recommendation_page_module.classify_disaster_type("쓰나미") == "해일/쓰나미"
+
+
+def test_get_disaster_options_includes_tsunami_without_matching_recent_alerts(
+    recommendation_page_module,
+    sample_preprocessing_dir,
+) -> None:
+    alerts_frame = recommendation_page_module.load_alerts_dataframe_uncached(sample_preprocessing_dir)
+
+    options = recommendation_page_module.get_disaster_options(
+        alerts_frame,
+        sido="경북",
+        sigungu="포항시",
+    )
+
+    assert "해일/쓰나미" in options
+
+
+def test_should_compute_recommendations_waits_for_manual_selection(recommendation_page_module) -> None:
+    assert not recommendation_page_module.should_compute_recommendations(None)
+    assert recommendation_page_module.should_compute_recommendations("호우/태풍")
 
 
 def test_haversine_km_returns_positive_distance(recommendation_page_module) -> None:
@@ -219,7 +241,7 @@ def test_recommend_shelters_uses_tsunami_dedicated_label(
         shelters_frame=shelters_frame,
         earthquake_shelters_frame=earthquake_shelters_frame,
         tsunami_shelters_frame=tsunami_shelters_frame,
-        disaster_group="지진해일/쓰나미",
+        disaster_group="해일/쓰나미",
         latitude=36.02,
         longitude=129.34,
         sido="경북",
@@ -257,3 +279,58 @@ def test_recommend_shelters_uses_fallback_when_needed(
     assert not recommendations.empty
     assert list(recommendations.columns) == recommendation_page_module.RECOMMENDATION_RESULT_COLUMNS
     assert recommendations.iloc[0]["추천구분"] in {"기본 대피소", "대체 대피소"}
+
+
+def test_should_display_recommendations_returns_true_within_threshold(
+    recommendation_page_module,
+    sample_preprocessing_dir,
+) -> None:
+    shelters_frame = recommendation_page_module.load_shelters_dataframe_uncached(sample_preprocessing_dir)
+    earthquake_shelters_frame = recommendation_page_module.load_earthquake_shelters_dataframe_uncached(
+        sample_preprocessing_dir
+    )
+    tsunami_shelters_frame = recommendation_page_module.load_tsunami_shelters_dataframe_uncached(
+        sample_preprocessing_dir
+    )
+    recommendations = recommendation_page_module.recommend_shelters(
+        shelters_frame=shelters_frame,
+        earthquake_shelters_frame=earthquake_shelters_frame,
+        tsunami_shelters_frame=tsunami_shelters_frame,
+        disaster_group="호우/태풍",
+        latitude=36.02,
+        longitude=129.34,
+        sido="경북",
+        sigungu="포항시",
+    )
+
+    assert recommendation_page_module.get_nearest_recommendation_distance_km(recommendations) is not None
+    assert recommendation_page_module.should_display_recommendations(recommendations)
+
+
+def test_should_display_recommendations_returns_false_over_threshold(
+    recommendation_page_module,
+    sample_preprocessing_dir,
+) -> None:
+    shelters_frame = recommendation_page_module.load_shelters_dataframe_uncached(sample_preprocessing_dir)
+    earthquake_shelters_frame = recommendation_page_module.load_earthquake_shelters_dataframe_uncached(
+        sample_preprocessing_dir
+    )
+    tsunami_shelters_frame = recommendation_page_module.load_tsunami_shelters_dataframe_uncached(
+        sample_preprocessing_dir
+    )
+    recommendations = recommendation_page_module.recommend_shelters(
+        shelters_frame=shelters_frame,
+        earthquake_shelters_frame=earthquake_shelters_frame,
+        tsunami_shelters_frame=tsunami_shelters_frame,
+        disaster_group="한파",
+        latitude=35.1796,
+        longitude=129.0756,
+        sido="부산",
+        sigungu="연제구",
+    )
+
+    nearest_distance = recommendation_page_module.get_nearest_recommendation_distance_km(recommendations)
+
+    assert nearest_distance is not None
+    assert nearest_distance > recommendation_page_module.MAX_ACTIONABLE_DISTANCE_KM
+    assert not recommendation_page_module.should_display_recommendations(recommendations)

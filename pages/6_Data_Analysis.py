@@ -22,8 +22,9 @@ DATASET_FILE_MAP = {
 
 RAW_TO_GROUP = {
     "지진": "지진",
-    "지진해일": "지진해일/쓰나미",
-    "쓰나미": "지진해일/쓰나미",
+    "지진해일": "해일/쓰나미",
+    "쓰나미": "해일/쓰나미",
+    "지진해일/쓰나미": "해일/쓰나미",
     "호우": "호우/태풍",
     "태풍": "호우/태풍",
     "강풍": "강풍/풍랑",
@@ -42,7 +43,7 @@ DEFAULT_DISASTER_OPTIONS = [
     "대설",
     "건조",
     "지진",
-    "지진해일/쓰나미",
+    "해일/쓰나미",
 ]
 
 ANALYSIS_COLUMNS = ["발표시간", "지역", "시군구", "재난종류", "재난그룹", "특보등급"]
@@ -428,7 +429,7 @@ def render_page() -> None:
         st.plotly_chart(build_hazard_share_chart(filtered), use_container_width=True)
         st.plotly_chart(build_shelter_type_chart(regional_shelters), use_container_width=True)
 
-    st.subheader("상세 특보 데이터")
+    st.subheader("기상상세 특보 데이터")
     display_frame = filtered.copy()
     display_frame["발표시간"] = display_frame["발표시간"].dt.strftime("%Y-%m-%d %H:%M")
     st.dataframe(display_frame, use_container_width=True, hide_index=True)

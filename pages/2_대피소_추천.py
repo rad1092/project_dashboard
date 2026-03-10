@@ -5,10 +5,10 @@
 로컬 데이터 기준으로 지역을 자동 추정한 뒤 가까운 대피소 Top 3 를 추천한다.
 
 중요한 설계 기준:
-- 현재는 실시간 API를 쓰지 않는다.
+- 현재 페이지는 실시간 API를 쓰지 않음.
 - 지도는 무료 OSM 타일만 사용한다.
-- 거리 계산은 직선 거리만 제공한다.
-- 전용 대피소가 부족하면 통합 대피소를 대체 후보로 보여준다.
+- 거리 계산은 직선 거리만 제공.
+- 전용 대피소가 부족하면 통합 대피소를 대체 후보로 보여줌.
 """
 
 import math
@@ -43,8 +43,9 @@ SPECIAL_SHELTER_TYPE_LABELS = {
 
 RAW_TO_GROUP = {
     "지진": "지진",
-    "지진해일": "지진해일/쓰나미",
-    "쓰나미": "지진해일/쓰나미",
+    "지진해일": "해일/쓰나미",
+    "쓰나미": "해일/쓰나미",
+    "지진해일/쓰나미": "해일/쓰나미",
     "호우": "호우/태풍",
     "태풍": "호우/태풍",
     "강풍": "강풍/풍랑",
@@ -63,8 +64,13 @@ DEFAULT_DISASTER_OPTIONS = [
     "대설",
     "건조",
     "지진",
-    "지진해일/쓰나미",
+    "해일/쓰나미",
 ]
+
+MAX_ACTIONABLE_DISTANCE_KM = 3.0
+OFFICIAL_GUIDANCE_MESSAGE = (
+    "재난문자, 기상청, 지자체 안내 같은 공식 재난 안내를 확인해주세요."
+)
 
 RECOMMENDATION_RESULT_COLUMNS = [
     "대피소명",
@@ -146,12 +152,12 @@ def resolve_data_dir(path_override: str | Path | None = None) -> Path:
 
     searched = "\n".join(f"- {path}" for path in checked_paths)
     raise FileNotFoundError(
-        "전처리 데이터 폴더를 찾지 못했다.\n"
+        "전처리 데이터 폴더를 찾지 못했습니다.\n"
         "기본 실행은 저장소 내부 `preprocessing_data` 폴더를 사용한다.\n"
         "다음 경로를 차례대로 확인했다:\n"
         f"{searched}\n"
         "다른 위치를 쓰려면 환경변수 `PREPROCESSING_DATA_DIR` 또는 "
-        "`.streamlit/secrets.toml` 의 `preprocessing_data_dir` 를 지정해 달라."
+        "`.streamlit/secrets.toml` 의 `preprocessing_data_dir` 를 지정해 주세요."
     )
 
 
@@ -165,7 +171,7 @@ def _read_csv(path: Path) -> pd.DataFrame:
             f"전처리 데이터 파일이 없다: {path}\n"
             "저장소 기본 데이터(`preprocessing_data/preprocessing/*.csv`)가 모두 있는지 확인하거나 "
             "다른 위치를 쓰려면 `PREPROCESSING_DATA_DIR` 또는 `.streamlit/secrets.toml` 의 "
-            "`preprocessing_data_dir` 를 지정해 달라."
+            "`preprocessing_data_dir` 를 지정해 주세요."
         ) from exc
 
 
@@ -174,7 +180,7 @@ def _validate_columns(dataframe: pd.DataFrame, expected_columns: list[str], labe
 
     missing_columns = [column for column in expected_columns if column not in dataframe.columns]
     if missing_columns:
-        raise ValueError(f"{label} CSV 에 필요한 컬럼이 없다: {missing_columns}")
+        raise ValueError(f"{label} CSV 에 필요한 컬럼이 없습니다: {missing_columns}")
 
 
 def _prepare_alerts(dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -457,14 +463,10 @@ def get_disaster_options(alerts_frame: pd.DataFrame, sido: str, sigungu: str) ->
     return deduplicated
 
 
-def select_priority_disaster(alerts_frame: pd.DataFrame, sido: str, sigungu: str) -> str:
-    """최근 특보를 기준으로 기본 선택 재난 그룹을 정한다."""
+def should_compute_recommendations(selected_disaster: str | None) -> bool:
+    """재난 유형이 직접 선택된 뒤에만 추천 계산을 수행한다."""
 
-    summary = build_alert_summary(alerts_frame, sido=sido, sigungu=sigungu)
-    latest_disaster = summary["latest_disaster"]
-    if latest_disaster:
-        return classify_disaster_type(str(latest_disaster))
-    return DEFAULT_DISASTER_OPTIONS[0]
+    return selected_disaster is not None and str(selected_disaster).strip() != ""
 
 
 def haversine_km(
@@ -519,7 +521,7 @@ def _build_primary_candidates(
 
     if disaster_group == "지진":
         return _filter_by_region(earthquake_shelters_frame, sido, sigungu), "전용 대피소"
-    if disaster_group == "지진해일/쓰나미":
+    if disaster_group == "해일/쓰나미":
         return _filter_by_region(tsunami_shelters_frame, sido, sigungu), "전용 대피소"
     if disaster_group == "폭염":
         filtered = shelters_frame[shelters_frame["대피소유형"].str.contains("무더위쉼터", na=False)]
@@ -661,6 +663,32 @@ def recommend_shelters(
     )
     standardized = _ensure_result_columns(combined)
     return standardized.head(top_n).reset_index(drop=True)
+
+
+def get_nearest_recommendation_distance_km(recommendations: pd.DataFrame) -> float | None:
+    """추천 결과 중 가장 가까운 후보의 직선 거리를 반환한다."""
+
+    if recommendations.empty or "거리_km" not in recommendations.columns:
+        return None
+
+    distances = pd.to_numeric(recommendations["거리_km"], errors="coerce").dropna()
+    if distances.empty:
+        return None
+
+    return float(distances.min())
+
+
+def should_display_recommendations(
+    recommendations: pd.DataFrame,
+    max_distance_km: float = MAX_ACTIONABLE_DISTANCE_KM,
+) -> bool:
+    """가장 가까운 후보가 충분히 가까울 때만 추천 결과를 행동형 카드로 보여준다."""
+
+    nearest_distance_km = get_nearest_recommendation_distance_km(recommendations)
+    if nearest_distance_km is None:
+        return False
+
+    return nearest_distance_km <= max_distance_km
 
 
 def build_recommendation_map(
@@ -829,28 +857,48 @@ def render_page() -> None:
         region_source = str(detected_region["source"])
 
     disaster_options = get_disaster_options(alerts_frame, active_sido, active_sigungu)
-    default_disaster = select_priority_disaster(alerts_frame, active_sido, active_sigungu)
     selected_disaster = st.sidebar.selectbox(
         "재난 유형",
         options=disaster_options,
-        index=disaster_options.index(default_disaster) if default_disaster in disaster_options else 0,
+        index=None,
+        placeholder="재난 유형을 선택해 달라",
     )
 
     alert_summary = build_alert_summary(alerts_frame, active_sido, active_sigungu)
     recent_alerts = get_recent_alerts(alerts_frame, active_sido, active_sigungu, limit=5)
-    recommendations = recommend_shelters(
-        shelters_frame=shelters_frame,
-        earthquake_shelters_frame=earthquake_shelters_frame,
-        tsunami_shelters_frame=tsunami_shelters_frame,
-        disaster_group=selected_disaster,
-        latitude=float(selected_latitude),
-        longitude=float(selected_longitude),
-        sido=active_sido,
-        sigungu=active_sigungu,
-    )
+    selection_pending = not should_compute_recommendations(selected_disaster)
+    if selection_pending:
+        recommendations = pd.DataFrame(columns=RECOMMENDATION_RESULT_COLUMNS)
+    else:
+        recommendations = recommend_shelters(
+            shelters_frame=shelters_frame,
+            earthquake_shelters_frame=earthquake_shelters_frame,
+            tsunami_shelters_frame=tsunami_shelters_frame,
+            disaster_group=str(selected_disaster),
+            latitude=float(selected_latitude),
+            longitude=float(selected_longitude),
+            sido=active_sido,
+            sigungu=active_sigungu,
+        )
+    nearest_recommendation_distance_km = get_nearest_recommendation_distance_km(recommendations)
+    display_recommendations = should_display_recommendations(recommendations)
+    hold_recommendations = not selection_pending and not recommendations.empty and not display_recommendations
+    hold_message = ""
+    if hold_recommendations:
+        if nearest_recommendation_distance_km is None:
+            hold_message = (
+                "추천 후보는 찾았지만 거리 기준을 확인하지 못해 현재 좌표에 대한 행동형 대피 추천은 보류합니다. "
+                + OFFICIAL_GUIDANCE_MESSAGE
+            )
+        else:
+            hold_message = (
+                f"가장 근접한 후보가 직선 거리 {nearest_recommendation_distance_km:.2f} km로 멀어 "
+                "현재 좌표에 대한 행동형 대피 추천은 보류합니다. "
+                + OFFICIAL_GUIDANCE_MESSAGE
+            )
 
     metric_columns = st.columns(4)
-    metric_columns[0].metric("선택 재난", selected_disaster)
+    metric_columns[0].metric("선택 재난", "-" if selection_pending else str(selected_disaster))
     metric_columns[1].metric(
         "최근 특보 시각",
         "-"
@@ -858,7 +906,14 @@ def render_page() -> None:
         else pd.Timestamp(alert_summary["latest_time"]).strftime("%Y-%m-%d %H:%M"),
     )
     metric_columns[2].metric("최근 확인 특보 수", f"{float(alert_summary['alert_count']):,.0f}")
-    metric_columns[3].metric("추천 후보 수", f"{float(len(recommendations)):,.0f}")
+    if selection_pending:
+        metric_columns[3].metric("추천 후보 수", "-")
+    elif recommendations.empty:
+        metric_columns[3].metric("추천 후보 수", "0")
+    elif hold_recommendations:
+        metric_columns[3].metric("추천 상태", "보류")
+    else:
+        metric_columns[3].metric("추천 후보 수", f"{float(len(recommendations)):,.0f}")
     detected_distance_label = (
         "-"
         if detected_region["distance_km"] is None or pd.isna(detected_region["distance_km"])
@@ -882,16 +937,21 @@ def render_page() -> None:
             if alert_summary["hazards"]:
                 st.markdown("- 최근 특보 유형: " + ", ".join(alert_summary["hazards"]))
             else:
-                st.markdown("- 최근 특보 데이터가 없어 수동 선택 재난 기준으로만 추천한다.")
+                st.markdown("- 최근 특보 데이터가 없어 재난을 선택하면 수동 기준으로 대피소 후보를 계산합니다.")
             st.markdown(f"- 입력 좌표: **{selected_latitude:.4f}, {selected_longitude:.4f}**")
             st.caption(
-                "현재 지역 감지는 행정경계 기반이 아니라 가장 가까운 지역 중심 좌표 기준이다. "
-                "감지 결과가 애매하면 사이드바의 `지역 직접 수정` 에서 보정할 수 있다."
+                "현재 지역 감지는 행정경계 기반이 아니라 가장 가까운 지역 중심 좌표 기준입니다. "
+                "감지 결과는 사이드바의 `지역 직접 수정` 에서 보정할 수 있다."
             )
             if detected_region["distance_km"] is not None and float(detected_region["distance_km"]) > 40:
-                st.warning("현재 좌표와 감지된 지역 중심 거리가 멀다. 필요하면 지역 직접 수정으로 보정해 달라.")
-        if recommendations.empty:
-            st.info("현재 조건으로 보여줄 추천 대피소가 없다.")
+                st.warning("현재 좌표와 감지된 지역 중심 거리가 멀다. 필요하면 지역 직접 수정으로 보정해 주세요.")
+        if selection_pending:
+            st.info("재난 유형을 선택하면 가까운 대피소 후보를 계산합니다.")
+        elif recommendations.empty:
+            st.info("현재 조건으로 보여줄 추천 대피소가 없습니다.")
+        elif hold_recommendations:
+            st.warning(hold_message)
+            st.info("현재 후보는 참고용 조회 결과일 뿐 행동형 추천으로는 표시하지 않습니다.")
         else:
             card_columns = st.columns(min(len(recommendations), 3))
             for index, (_, row) in enumerate(recommendations.iterrows()):
@@ -906,28 +966,32 @@ def render_page() -> None:
                         st.markdown(f"**주소**: {row['주소']}")
                         st.caption(row["추천사유"])
 
-    with top_right:
-        with st.container(border=True):
-            st.subheader("추천 지도")
-            components.html(
-                build_recommendation_map(
-                    user_latitude=float(selected_latitude),
-                    user_longitude=float(selected_longitude),
-                    recommendations=recommendations,
-                )._repr_html_(),
-                height=470,
-            )
-            st.caption("지도 위 선은 직선 거리 기준 연결선이며 실제 도로 경로를 의미하지 않는다.")
+    if not selection_pending:
+        with top_right:
+            with st.container(border=True):
+                st.subheader("추천 지도")
+                if recommendations.empty:
+                    st.info("표시할 추천 지도가 없다.")
+                elif hold_recommendations:
+                    st.warning("추천 보류 상태 입니다. 공식 재난 안내를 확인해 주세요.")
+                else:
+                    components.html(
+                        build_recommendation_map(
+                            user_latitude=float(selected_latitude),
+                            user_longitude=float(selected_longitude),
+                            recommendations=recommendations,
+                        )._repr_html_(),
+                        height=470,
+                    )
+                    st.caption("지도 직선 거리 기준이며, 실제 도로 경로를 의미하지 않습니다.")
 
     st.divider()
 
-    table_left, table_right = st.columns([0.95, 1.05], gap="large")
-
-    with table_left:
+    if selection_pending:
         with st.container(border=True):
             st.subheader("최근 특보 이력")
             if recent_alerts.empty:
-                st.info("선택한 지역에서 바로 보여줄 최근 특보 이력이 없다.")
+                st.info("선택한 지역의 최근 특보 이력이 없습니다.")
             else:
                 alert_display = recent_alerts.copy()
                 alert_display["발표시간"] = alert_display["발표시간"].dt.strftime("%Y-%m-%d %H:%M")
@@ -936,27 +1000,45 @@ def render_page() -> None:
                     use_container_width=True,
                     hide_index=True,
                 )
+    else:
+        table_left, table_right = st.columns([0.95, 1.05], gap="large")
 
-    with table_right:
-        with st.container(border=True):
-            st.subheader("추천 결과 표")
-            if recommendations.empty:
-                st.warning("현재 조건에서는 추천할 대피소가 없다. 지역이나 좌표를 조정해 달라.")
-            else:
-                display_frame = recommendations.copy()
-                display_frame["거리"] = display_frame["거리_km"].map(
-                    lambda value: "-" if pd.isna(value) else f"{float(value):.2f} km"
-                )
-                display_frame["수용인원"] = display_frame["수용인원_정렬값"].map(
-                    lambda value: f"{float(value):,.0f}명"
-                )
-                st.dataframe(
-                    display_frame[
-                        ["대피소명", "추천구분", "대피소유형", "거리", "수용인원", "주소", "추천사유"]
-                    ],
-                    use_container_width=True,
-                    hide_index=True,
-                )
+        with table_left:
+            with st.container(border=True):
+                st.subheader("최근 특보 이력")
+                if recent_alerts.empty:
+                    st.info("선택한 지역의 최근 특보 이력이 없습니다.")
+                else:
+                    alert_display = recent_alerts.copy()
+                    alert_display["발표시간"] = alert_display["발표시간"].dt.strftime("%Y-%m-%d %H:%M")
+                    st.dataframe(
+                        alert_display[["발표시간", "지역", "시군구", "재난종류", "특보등급"]],
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+        with table_right:
+            with st.container(border=True):
+                st.subheader("추천 결과 표")
+                if recommendations.empty:
+                    st.warning("현재 조건에서는 추천할 대피소가 없습니다. 지역이나 좌표를 조정해 주세요.")
+                elif hold_recommendations:
+                    st.warning(hold_message)
+                else:
+                    display_frame = recommendations.copy()
+                    display_frame["거리"] = display_frame["거리_km"].map(
+                        lambda value: "-" if pd.isna(value) else f"{float(value):.2f} km"
+                    )
+                    display_frame["수용인원"] = display_frame["수용인원_정렬값"].map(
+                        lambda value: f"{float(value):,.0f}명"
+                    )
+                    st.dataframe(
+                        display_frame[
+                            ["대피소명", "추천구분", "대피소유형", "거리", "수용인원", "주소", "추천사유"]
+                        ],
+                        use_container_width=True,
+                        hide_index=True,
+                    )
 
 
 if os.environ.get("PROJECT_DASHBOARD_IMPORT_ONLY") != "1":
