@@ -861,7 +861,7 @@ def render_page() -> None:
         "재난 유형",
         options=disaster_options,
         index=None,
-        placeholder="재난 유형을 선택해 달라",
+        placeholder="재난 유형 선택",
     )
 
     alert_summary = build_alert_summary(alerts_frame, active_sido, active_sigungu)
