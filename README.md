@@ -52,7 +52,6 @@
 .venv\Scripts\activate
 uv sync --dev
 streamlit run app.py
-#devcontainer 안써도 됩니다.
 ```
 
 ## 테스트
