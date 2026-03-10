@@ -49,42 +49,6 @@ DEFAULT_DISASTER_OPTIONS = [
 
 ANALYSIS_COLUMNS = ["발표시간", "지역", "시군구", "재난종류", "재난그룹", "특보등급"]
 COLOR_SEQUENCE = ["#0f766e", "#1d4ed8", "#f59e0b", "#dc2626", "#0f172a"]
-
-
-def apply_page_config() -> None:
-    """분석 페이지의 Streamlit 기본 설정을 적용한다."""
-
-    st.set_page_config(
-        page_title=f"{APP_TITLE} | {PAGE_LABEL}",
-        page_icon=APP_ICON,
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
-
-
-def render_page_intro(title: str, subtitle: str, caption: str | None = None) -> None:
-    """페이지 상단의 공통 제목 블록을 그린다."""
-
-    st.title(title)
-    st.write(subtitle)
-    if caption:
-        st.caption(caption)
-
-
-def format_number(value: int | float) -> str:
-    """천 단위 구분 기호가 있는 문자열로 바꾼다."""
-
-    return f"{float(value):,.0f}"
-
-
-def format_datetime(value: pd.Timestamp | None) -> str:
-    """날짜/시간 값을 화면용 문자열로 바꾼다."""
-
-    if value is None or pd.isna(value):
-        return "-"
-    return pd.Timestamp(value).strftime("%Y-%m-%d %H:%M")
-
-
 def _maybe_get_secret_data_dir() -> str | None:
     """Streamlit secrets 에 설정된 외부 데이터 경로가 있는지 읽는다."""
 
@@ -405,12 +369,17 @@ def build_shelter_type_chart(dataframe: pd.DataFrame) -> go.Figure:
 def render_page() -> None:
     """분석 페이지를 렌더링한다."""
 
-    apply_page_config()
+    st.set_page_config(
+        page_title=f"{APP_TITLE} | {PAGE_LABEL}",
+        page_icon=APP_ICON,
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
 
-    render_page_intro(
-        "6 Data Analysis",
-        "현재 앱이 참고하는 과거 재난 특보와 대피소 분포를 분석 관점에서 정리한 페이지입니다.",
-        "추천 페이지가 한 지역의 결과를 보여준다면, 이 페이지는 전체 데이터 흐름과 분포를 읽는 데 초점을 둡니다.",
+    st.title("6 Data Analysis")
+    st.write("현재 앱이 참고하는 과거 재난 특보와 대피소 분포를 분석 관점에서 정리한 페이지입니다.")
+    st.caption(
+        "추천 페이지가 한 지역의 결과를 보여준다면, 이 페이지는 전체 데이터 흐름과 분포를 읽는 데 초점을 둡니다."
     )
 
     try:
@@ -441,10 +410,15 @@ def render_page() -> None:
 
     kpis = build_kpis(filtered)
     metric_columns = st.columns(4)
-    metric_columns[0].metric("특보 기록 수", format_number(kpis["alert_count"]))
-    metric_columns[1].metric("재난 그룹 수", format_number(kpis["disaster_count"]))
-    metric_columns[2].metric("경보 건수", format_number(kpis["warning_count"]))
-    metric_columns[3].metric("최근 특보 시각", format_datetime(kpis["latest_period"]))
+    metric_columns[0].metric("특보 기록 수", f"{float(kpis['alert_count']):,.0f}")
+    metric_columns[1].metric("재난 그룹 수", f"{float(kpis['disaster_count']):,.0f}")
+    metric_columns[2].metric("경보 건수", f"{float(kpis['warning_count']):,.0f}")
+    metric_columns[3].metric(
+        "최근 특보 시각",
+        "-"
+        if kpis["latest_period"] is None or pd.isna(kpis["latest_period"])
+        else pd.Timestamp(kpis["latest_period"]).strftime("%Y-%m-%d %H:%M"),
+    )
 
     regional_shelters = shelters_frame[shelters_frame["시도"].isin(selected_sidos)]
 

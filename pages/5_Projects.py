@@ -32,7 +32,7 @@ PROJECT_ITEMS = [
         "highlights": [
             "청사진 PNG를 그대로 쓰지 않고 Streamlit 흐름 카드로 재구성",
             "현재 구현된 무료 구간과 미래 실시간 구간을 분리해 설명",
-            "데이터셋별 역할과 컬럼 의미를 한 페이지에서 이해 가능하게 정리",
+            "과한 구현 설명은 docs 로 옮기고 페이지는 요약판으로 유지",
         ],
         "next_action": "실시간 연결 시 어떤 함수와 페이지를 바꿔야 하는지 체크리스트까지 연결한다.",
     },
@@ -40,10 +40,10 @@ PROJECT_ITEMS = [
         "title": "실시간 확장 준비 구조",
         "status": "planned",
         "summary": "현재는 비활성화해 두지만, 나중에 자동 위치·실시간 특보·경로 API를 어디에 붙일지 코드와 문서로 먼저 설계하는 작업",
-        "role": "확장 포인트 설계, 주석 기반 스텁 작성, 미래 인터페이스 정리",
+        "role": "확장 포인트 설계, docs 기준 정리, 미래 인터페이스 고정",
         "highlights": [
             "현재 기능과 미래 기능을 한 파일에 섞지 않고 준비 페이지로 분리",
-            "비활성화된 버튼과 주석 처리된 함수 예시로 확장 위치를 명확히 표시",
+            "비활성화된 버튼과 docs 경로로 확장 위치를 명확히 표시",
             "실시간 전환 시에도 기존 추천 페이지 구조를 최대한 유지하도록 설계",
         ],
         "next_action": "실시간 API를 붙이기 전에 권한, 호출량, 실패 처리 기준을 먼저 문서화한다.",
@@ -57,8 +57,8 @@ STATUS_LABELS = {
 }
 
 
-def apply_page_config() -> None:
-    """프로젝트 페이지의 Streamlit 기본 설정을 적용한다."""
+def render_page() -> None:
+    """프로젝트 페이지를 렌더링한다."""
 
     st.set_page_config(
         page_title=f"{APP_TITLE} | {PAGE_LABEL}",
@@ -67,41 +67,21 @@ def apply_page_config() -> None:
         initial_sidebar_state="expanded",
     )
 
-
-def render_page_intro(title: str, subtitle: str, caption: str | None = None) -> None:
-    """페이지 상단의 공통 제목 블록을 그린다."""
-
-    st.title(title)
-    st.write(subtitle)
-    if caption:
-        st.caption(caption)
-
-
-def label_status(status: str) -> str:
-    """내부 상태 코드를 화면용 라벨로 바꾼다."""
-
-    return STATUS_LABELS.get(status, status)
-
-
-def render_page() -> None:
-    """프로젝트 페이지를 렌더링한다."""
-
-    apply_page_config()
-
-    render_page_intro(
-        "5 Projects",
-        "현재 저장소 안에서 진행 중인 재난 대피소 추천 기능과 설명 구조 작업을 카드 형태로 정리한 페이지입니다.",
-        "실제 구현 작업이 늘어날수록 이 목록을 계속 갱신해 프로젝트 맥락을 남깁니다.",
+    st.title("5 Projects")
+    st.write(
+        "현재 저장소 안에서 진행 중인 재난 대피소 추천 기능과 설명 구조 작업을 카드 형태로 정리한 페이지입니다."
     )
+    st.caption("실제 구현 작업이 늘어날수록 이 목록을 계속 갱신해 프로젝트 맥락을 남깁니다.")
 
     for item in PROJECT_ITEMS:
+        status_label = STATUS_LABELS.get(str(item["status"]), str(item["status"]))
         with st.container(border=True):
             top_left, top_right = st.columns([0.75, 0.25])
             with top_left:
                 st.subheader(item["title"])
                 st.write(item["summary"])
             with top_right:
-                st.metric("상태", label_status(item["status"]))
+                st.metric("상태", status_label)
 
             detail_left, detail_right = st.columns([0.55, 0.45], gap="large")
             with detail_left:

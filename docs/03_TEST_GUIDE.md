@@ -12,7 +12,7 @@
 - `tests/test_recommendation_page.py`: 추천 페이지 내부 helper, 데이터 경로 해석, 추천 규칙
 - `tests/test_analysis_page.py`: 분석용 DataFrame, KPI, 차트 생성
 - `tests/test_home_page.py`: 홈 메타데이터, KPI, 데이터셋 카탈로그
-- `tests/test_static_pages.py`: 정적 페이지 inline 콘텐츠와 문법
+- `tests/test_static_pages.py`: 정적 페이지 요약 콘텐츠, docs 연계, 문법
 
 ## import-only 모드
 
@@ -27,3 +27,4 @@
 - 데이터 경로 우선순위와 오류 메시지가 유지돼야 한다.
 - 추천 결과 컬럼 순서가 유지돼야 한다.
 - 분석 KPI 와 차트가 샘플 데이터에서 정상 생성돼야 한다.
+- 설명 페이지는 과한 구현 설명 대신 요약 상수와 docs 경로를 유지해야 한다.

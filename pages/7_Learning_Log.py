@@ -9,6 +9,7 @@ import streamlit as st
 APP_TITLE = "재난 대피소 추천 워크스페이스"
 APP_ICON = "🛟"
 PAGE_LABEL = "7 Learning Log"
+DETAIL_DOC_PATH = "docs/04_INTERNAL_FUNCTION_CLEANUP.md"
 
 LEARNING_TOPICS = [
     {
@@ -69,8 +70,8 @@ ROADMAP_STEPS = [
 ]
 
 
-def apply_page_config() -> None:
-    """학습 로그 페이지의 Streamlit 기본 설정을 적용한다."""
+def render_page() -> None:
+    """학습 로그 페이지를 렌더링한다."""
 
     st.set_page_config(
         page_title=f"{APP_TITLE} | {PAGE_LABEL}",
@@ -79,26 +80,9 @@ def apply_page_config() -> None:
         initial_sidebar_state="expanded",
     )
 
-
-def render_page_intro(title: str, subtitle: str, caption: str | None = None) -> None:
-    """페이지 상단의 공통 제목 블록을 그린다."""
-
-    st.title(title)
-    st.write(subtitle)
-    if caption:
-        st.caption(caption)
-
-
-def render_page() -> None:
-    """학습 로그 페이지를 렌더링한다."""
-
-    apply_page_config()
-
-    render_page_intro(
-        "7 Learning Log",
-        "현재 저장소를 통해 무엇을 배우고, 어떤 순서로 재난 앱을 확장할지 정리한 페이지입니다.",
-        "코드와 문서를 같이 유지하기 위한 학습 포인트와 로드맵을 함께 기록합니다.",
-    )
+    st.title("7 Learning Log")
+    st.write("현재 저장소를 통해 무엇을 배우고, 어떤 순서로 재난 앱을 확장할지 정리한 페이지입니다.")
+    st.caption("코드와 문서를 같이 유지하기 위한 학습 포인트와 로드맵을 함께 기록합니다.")
 
     topic_tab, roadmap_tab, rules_tab = st.tabs(["학습 주제", "로드맵", "운영 규칙"])
 
@@ -124,6 +108,7 @@ def render_page() -> None:
             st.markdown("- 유료 API와 유료 지도 API는 현재 단계 코드에 넣지 않는다.")
             st.markdown("- 각 페이지 파일이 자기 화면 흐름과 데이터 규칙을 직접 설명할 수 있게 유지한다.")
             st.markdown("- 새 기능을 넣을 때는 docs와 테스트를 함께 갱신한다.")
+            st.markdown(f"- 상세 정리 기준은 `{DETAIL_DOC_PATH}` 에서 함께 관리한다.")
 
 
 if os.environ.get("PROJECT_DASHBOARD_IMPORT_ONLY") != "1":

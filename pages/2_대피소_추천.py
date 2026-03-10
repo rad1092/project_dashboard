@@ -83,47 +83,6 @@ RECOMMENDATION_RESULT_COLUMNS = [
     "추천사유",
 ]
 
-def apply_page_config() -> None:
-    """추천 페이지의 Streamlit 기본 설정을 적용한다."""
-
-    st.set_page_config(
-        page_title=f"{APP_TITLE} | {PAGE_LABEL}",
-        page_icon=APP_ICON,
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
-
-
-def render_page_intro(title: str, subtitle: str, caption: str | None = None) -> None:
-    """페이지 상단의 공통 제목 블록을 그린다."""
-
-    st.title(title)
-    st.write(subtitle)
-    if caption:
-        st.caption(caption)
-
-
-def format_number(value: int | float) -> str:
-    """천 단위 구분 기호가 있는 문자열로 바꾼다."""
-
-    return f"{float(value):,.0f}"
-
-
-def format_distance_km(value: float | None) -> str:
-    """직선 거리 값을 km 문자열로 바꾼다."""
-
-    if value is None or pd.isna(value):
-        return "-"
-    return f"{float(value):.2f} km"
-
-
-def format_datetime(value: pd.Timestamp | None) -> str:
-    """날짜/시간 값을 화면용 문자열로 바꾼다."""
-
-    if value is None or pd.isna(value):
-        return "-"
-    return pd.Timestamp(value).strftime("%Y-%m-%d %H:%M")
-
 
 def _maybe_get_secret_data_dir() -> str | None:
     """Streamlit secrets 에 설정된 외부 데이터 경로가 있는지 읽는다."""
@@ -160,29 +119,6 @@ def normalize_sigungu_name(value: str | None) -> str:
     if text.endswith(("시", "군")) and len(text) > 1:
         return text[:-1]
     return text
-
-
-def _haversine_km(
-    latitude_a: float,
-    longitude_a: float,
-    latitude_b: float,
-    longitude_b: float,
-) -> float:
-    """두 위경도 사이의 직선 거리를 km 단위로 계산한다."""
-
-    earth_radius_km = 6371.0
-    lat_a = math.radians(latitude_a)
-    lon_a = math.radians(longitude_a)
-    lat_b = math.radians(latitude_b)
-    lon_b = math.radians(longitude_b)
-
-    delta_lat = lat_b - lat_a
-    delta_lon = lon_b - lon_a
-    haversine_value = (
-        math.sin(delta_lat / 2) ** 2
-        + math.cos(lat_a) * math.cos(lat_b) * math.sin(delta_lon / 2) ** 2
-    )
-    return earth_radius_km * 2 * math.asin(math.sqrt(haversine_value))
 
 
 def resolve_data_dir(path_override: str | Path | None = None) -> Path:
@@ -411,7 +347,7 @@ def infer_region_from_coordinates(
 
     scored = region_centers.copy()
     scored["distance_km"] = scored.apply(
-        lambda row: _haversine_km(
+        lambda row: haversine_km(
             latitude,
             longitude,
             float(row["중심위도"]),
@@ -729,36 +665,6 @@ def recommend_shelters(
     return standardized.head(top_n).reset_index(drop=True)
 
 
-def render_recommendation_cards(recommendations: pd.DataFrame) -> None:
-    """추천 결과를 카드 3장 형태로 보여준다."""
-
-    if recommendations.empty:
-        st.info("현재 조건으로 보여줄 추천 대피소가 없다.")
-        return
-
-    columns = st.columns(min(len(recommendations), 3))
-    for index, (_, row) in enumerate(recommendations.iterrows()):
-        with columns[index]:
-            with st.container(border=True):
-                st.subheader(f"Top {index + 1}. {row['대피소명']}")
-                st.markdown(f"**구분**: {row['추천구분']}")
-                st.markdown(f"**직선 거리**: {format_distance_km(row['거리_km'])}")
-                st.markdown(f"**대피소 유형**: {row['대피소유형']}")
-                st.markdown(f"**수용인원**: {format_number(row['수용인원_정렬값'])}명")
-                st.markdown(f"**주소**: {row['주소']}")
-                st.caption(row["추천사유"])
-
-
-def _get_marker_color(recommendation_type: str) -> str:
-    """추천 구분에 따라 지도 마커 색을 고른다."""
-
-    if recommendation_type == "전용 대피소":
-        return "#0f766e"
-    if recommendation_type == "대체 대피소":
-        return "#f59e0b"
-    return "#1d4ed8"
-
-
 def build_recommendation_map(
     user_latitude: float,
     user_longitude: float,
@@ -787,7 +693,13 @@ def build_recommendation_map(
     for row in recommendations.to_dict(orient="records"):
         shelter_latitude = float(row["위도"])
         shelter_longitude = float(row["경도"])
-        color = _get_marker_color(str(row["추천구분"]))
+        recommendation_type = str(row["추천구분"])
+        if recommendation_type == "전용 대피소":
+            color = "#0f766e"
+        elif recommendation_type == "대체 대피소":
+            color = "#f59e0b"
+        else:
+            color = "#1d4ed8"
 
         folium.CircleMarker(
             location=[shelter_latitude, shelter_longitude],
@@ -815,32 +727,19 @@ def build_recommendation_map(
     return map_object
 
 
-def render_recommendation_map(
-    user_latitude: float,
-    user_longitude: float,
-    recommendations: pd.DataFrame,
-    height: int = 460,
-) -> None:
-    """folium 지도를 Streamlit HTML 블록으로 렌더링한다."""
-
-    map_object = build_recommendation_map(
-        user_latitude=user_latitude,
-        user_longitude=user_longitude,
-        recommendations=recommendations,
-    )
-    components.html(map_object._repr_html_(), height=height)
-
-
 def render_page() -> None:
     """추천 페이지를 렌더링한다."""
 
-    apply_page_config()
-
-    render_page_intro(
-        "2 대피소 추천",
-        "입력 좌표를 기준으로 지역을 자동 감지하고, 현재 데이터 안에서 가까운 대피소 Top 3 를 추천합니다.",
-        "실제 경로 안내가 아니라 직선 거리 기준 추천이며, 지역 감지는 가장 가까운 지역 중심 좌표를 기준으로 동작합니다.",
+    st.set_page_config(
+        page_title=f"{APP_TITLE} | {PAGE_LABEL}",
+        page_icon=APP_ICON,
+        layout="wide",
+        initial_sidebar_state="expanded",
     )
+
+    st.title("2 대피소 추천")
+    st.write("입력 좌표를 기준으로 지역을 자동 감지하고, 현재 데이터 안에서 가까운 대피소 Top 3 를 추천합니다.")
+    st.caption("실제 경로 안내가 아니라 직선 거리 기준 추천이며, 지역 감지는 가장 가까운 지역 중심 좌표를 기준으로 동작합니다.")
 
     try:
         alerts_frame = load_alerts_dataframe()
@@ -954,9 +853,19 @@ def render_page() -> None:
 
     metric_columns = st.columns(4)
     metric_columns[0].metric("선택 재난", selected_disaster)
-    metric_columns[1].metric("최근 특보 시각", format_datetime(alert_summary["latest_time"]))
-    metric_columns[2].metric("최근 확인 특보 수", format_number(alert_summary["alert_count"]))
-    metric_columns[3].metric("추천 후보 수", format_number(len(recommendations)))
+    metric_columns[1].metric(
+        "최근 특보 시각",
+        "-"
+        if alert_summary["latest_time"] is None or pd.isna(alert_summary["latest_time"])
+        else pd.Timestamp(alert_summary["latest_time"]).strftime("%Y-%m-%d %H:%M"),
+    )
+    metric_columns[2].metric("최근 확인 특보 수", f"{float(alert_summary['alert_count']):,.0f}")
+    metric_columns[3].metric("추천 후보 수", f"{float(len(recommendations)):,.0f}")
+    detected_distance_label = (
+        "-"
+        if detected_region["distance_km"] is None or pd.isna(detected_region["distance_km"])
+        else f"{float(detected_region['distance_km']):.2f} km"
+    )
 
     top_left, top_right = st.columns([1.1, 0.9], gap="large")
 
@@ -965,7 +874,7 @@ def render_page() -> None:
             st.subheader("현재 좌표 기준 특보 요약")
             st.markdown(
                 f"- 감지 지역: **{detected_sido} {detected_sigungu}** "
-                f"({format_distance_km(detected_region['distance_km'])} 떨어진 지역 중심 기준)"
+                f"({detected_distance_label} 떨어진 지역 중심 기준)"
             )
             if region_source == "manual_override":
                 st.markdown(f"- 보정 지역: **{active_sido} {active_sigungu}**")
@@ -983,16 +892,31 @@ def render_page() -> None:
             )
             if detected_region["distance_km"] is not None and float(detected_region["distance_km"]) > 40:
                 st.warning("현재 좌표와 감지된 지역 중심 거리가 멀다. 필요하면 지역 직접 수정으로 보정해 달라.")
-
-        render_recommendation_cards(recommendations)
+        if recommendations.empty:
+            st.info("현재 조건으로 보여줄 추천 대피소가 없다.")
+        else:
+            card_columns = st.columns(min(len(recommendations), 3))
+            for index, (_, row) in enumerate(recommendations.iterrows()):
+                distance_label = "-" if pd.isna(row["거리_km"]) else f"{float(row['거리_km']):.2f} km"
+                with card_columns[index]:
+                    with st.container(border=True):
+                        st.subheader(f"Top {index + 1}. {row['대피소명']}")
+                        st.markdown(f"**구분**: {row['추천구분']}")
+                        st.markdown(f"**직선 거리**: {distance_label}")
+                        st.markdown(f"**대피소 유형**: {row['대피소유형']}")
+                        st.markdown(f"**수용인원**: {float(row['수용인원_정렬값']):,.0f}명")
+                        st.markdown(f"**주소**: {row['주소']}")
+                        st.caption(row["추천사유"])
 
     with top_right:
         with st.container(border=True):
             st.subheader("추천 지도")
-            render_recommendation_map(
-                user_latitude=float(selected_latitude),
-                user_longitude=float(selected_longitude),
-                recommendations=recommendations,
+            components.html(
+                build_recommendation_map(
+                    user_latitude=float(selected_latitude),
+                    user_longitude=float(selected_longitude),
+                    recommendations=recommendations,
+                )._repr_html_(),
                 height=470,
             )
             st.caption("지도 위 선은 직선 거리 기준 연결선이며 실제 도로 경로를 의미하지 않는다.")
@@ -1022,9 +946,11 @@ def render_page() -> None:
                 st.warning("현재 조건에서는 추천할 대피소가 없다. 지역이나 좌표를 조정해 달라.")
             else:
                 display_frame = recommendations.copy()
-                display_frame["거리"] = display_frame["거리_km"].map(format_distance_km)
+                display_frame["거리"] = display_frame["거리_km"].map(
+                    lambda value: "-" if pd.isna(value) else f"{float(value):.2f} km"
+                )
                 display_frame["수용인원"] = display_frame["수용인원_정렬값"].map(
-                    lambda value: f"{format_number(value)}명"
+                    lambda value: f"{float(value):,.0f}명"
                 )
                 st.dataframe(
                     display_frame[

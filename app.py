@@ -118,34 +118,6 @@ DEFAULT_DISASTER_OPTIONS = [
 ]
 
 ANALYSIS_COLUMNS = ["발표시간", "지역", "시군구", "재난종류", "재난그룹", "특보등급"]
-
-
-def apply_page_config(page_key: str) -> None:
-    """주어진 페이지 키에 맞는 Streamlit 기본 설정을 적용한다."""
-
-    page = PAGE_META[page_key]
-    st.set_page_config(
-        page_title=f"{APP_TITLE} | {page['label']}",
-        page_icon=APP_ICON,
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
-
-
-def format_number(value: int | float) -> str:
-    """천 단위 구분 기호가 있는 문자열로 바꾼다."""
-
-    return f"{float(value):,.0f}"
-
-
-def format_datetime(value: pd.Timestamp | None) -> str:
-    """날짜/시간 값을 화면용 문자열로 바꾼다."""
-
-    if value is None or pd.isna(value):
-        return "-"
-    return pd.Timestamp(value).strftime("%Y-%m-%d %H:%M")
-
-
 def _maybe_get_secret_data_dir() -> str | None:
     """Streamlit secrets 에 설정된 외부 데이터 경로가 있는지 읽는다."""
 
@@ -444,7 +416,12 @@ def build_dataset_catalog(
 def render_page() -> None:
     """홈 페이지를 렌더링한다."""
 
-    apply_page_config("home")
+    st.set_page_config(
+        page_title=f"{APP_TITLE} | {PAGE_META['home']['label']}",
+        page_icon=APP_ICON,
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
 
     st.title(PAGE_META["home"]["label"])
     st.write(
@@ -480,10 +457,15 @@ def render_page() -> None:
     )
 
     metric_columns = st.columns(4)
-    metric_columns[0].metric("특보 기록 수", format_number(kpis["alert_count"]))
-    metric_columns[1].metric("통합 대피소 수", format_number(len(shelters_frame)))
-    metric_columns[2].metric("권역 수", format_number(kpis["region_count"]))
-    metric_columns[3].metric("최근 특보 시각", format_datetime(kpis["latest_period"]))
+    metric_columns[0].metric("특보 기록 수", f"{float(kpis['alert_count']):,.0f}")
+    metric_columns[1].metric("통합 대피소 수", f"{float(len(shelters_frame)):,.0f}")
+    metric_columns[2].metric("권역 수", f"{float(kpis['region_count']):,.0f}")
+    metric_columns[3].metric(
+        "최근 특보 시각",
+        "-"
+        if kpis["latest_period"] is None or pd.isna(kpis["latest_period"])
+        else pd.Timestamp(kpis["latest_period"]).strftime("%Y-%m-%d %H:%M"),
+    )
 
     st.divider()
 
@@ -512,7 +494,7 @@ def render_page() -> None:
             st.subheader("현재 연결된 데이터셋")
             for item in catalog:
                 st.markdown(
-                    f"- **{item['name']}**: {format_number(item['rows'])}건, "
+                    f"- **{item['name']}**: {float(item['rows']):,.0f}건, "
                     f"{item['description']}"
                 )
 
