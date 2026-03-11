@@ -13,6 +13,7 @@
 
 import math
 import os
+from collections.abc import MutableMapping
 from pathlib import Path
 
 import folium
@@ -395,6 +396,34 @@ def get_region_center(
         return None, None
 
     return float(filtered["중심위도"].mean()), float(filtered["중심경도"].mean())
+
+
+def update_recommendation_coordinates_from_region_center(
+    shelters_frame: pd.DataFrame,
+    sido: str,
+    sigungu: str,
+    state: MutableMapping[str, object],
+) -> bool:
+    """선택한 지역 중심 좌표로 추천 입력 좌표를 갱신한다."""
+
+    latitude, longitude = get_region_center(shelters_frame, sido=sido, sigungu=sigungu)
+    if latitude is None or longitude is None:
+        return False
+
+    state["recommendation_lat"] = float(latitude)
+    state["recommendation_lon"] = float(longitude)
+    return True
+
+
+def sync_manual_region_center_to_recommendation_inputs(shelters_frame: pd.DataFrame) -> None:
+    """수동 보정 지역을 기준으로 추천 좌표 입력값을 동기화한다."""
+
+    update_recommendation_coordinates_from_region_center(
+        shelters_frame=shelters_frame,
+        sido=str(st.session_state.get("manual_sido", "")),
+        sigungu=str(st.session_state.get("manual_sigungu", "")),
+        state=st.session_state,
+    )
 
 
 def get_recent_alerts(
@@ -835,16 +864,11 @@ def render_page() -> None:
 
         st.selectbox("시군구", options=manual_sigungu_options, key="manual_sigungu")
 
-        manual_center_latitude, manual_center_longitude = get_region_center(
-            shelters_frame,
-            st.session_state["manual_sido"],
-            st.session_state["manual_sigungu"],
+        st.button(
+            "보정 지역 중심 좌표 불러오기",
+            on_click=sync_manual_region_center_to_recommendation_inputs,
+            args=(shelters_frame,),
         )
-        if st.button("보정 지역 중심 좌표 불러오기"):
-            if manual_center_latitude is not None and manual_center_longitude is not None:
-                st.session_state["recommendation_lat"] = manual_center_latitude
-                st.session_state["recommendation_lon"] = manual_center_longitude
-                st.rerun()
 
     if st.session_state["use_manual_region"]:
         active_sido = str(st.session_state["manual_sido"])

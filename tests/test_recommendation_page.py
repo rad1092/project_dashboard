@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 
 def test_resolve_data_dir_uses_override(recommendation_page_module, sample_preprocessing_dir) -> None:
     assert recommendation_page_module.resolve_data_dir(sample_preprocessing_dir) == sample_preprocessing_dir.resolve()
@@ -163,6 +165,25 @@ def test_infer_region_from_coordinates_uses_nearest_region_center(
     assert pohang_region["source"] == "auto_detected"
     assert andong_region["sido"] == "경북"
     assert andong_region["sigungu"] == "안동시"
+
+
+def test_update_recommendation_coordinates_from_region_center_sets_state(
+    recommendation_page_module,
+    sample_preprocessing_dir,
+) -> None:
+    shelters_frame = recommendation_page_module.load_shelters_dataframe_uncached(sample_preprocessing_dir)
+    state: dict[str, float] = {}
+
+    updated = recommendation_page_module.update_recommendation_coordinates_from_region_center(
+        shelters_frame=shelters_frame,
+        sido="경북",
+        sigungu="포항시",
+        state=state,
+    )
+
+    assert updated is True
+    assert state["recommendation_lat"] == pytest.approx(36.02)
+    assert state["recommendation_lon"] == pytest.approx(129.344)
 
 
 def test_classify_disaster_type_maps_known_labels(recommendation_page_module) -> None:
