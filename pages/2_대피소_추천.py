@@ -23,7 +23,7 @@ import streamlit.components.v1 as components
 
 APP_TITLE = "재난 대피소 추천 워크스페이스"
 APP_ICON = "🛟"
-PAGE_LABEL = "2 대피소 추천"
+PAGE_LABEL = "대피소 추천"
 
 ALERT_COLUMNS = ["발표시간", "지역", "시군구", "재난종류", "특보등급", "해당지역"]
 SHELTER_COLUMNS = ["대피소명", "주소", "대피소유형", "위도", "경도", "시도", "시군구", "지역", "수용인원"]

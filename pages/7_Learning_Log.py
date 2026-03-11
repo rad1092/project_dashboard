@@ -6,7 +6,7 @@ import streamlit as st
 
 APP_TITLE = "재난 대피소 추천 워크스페이스"
 APP_ICON = "🛟"
-PAGE_LABEL = "7 Learning Log"
+PAGE_LABEL = "Learning Log"
 DETAIL_DOC_PATH = "docs/04_INTERNAL_FUNCTION_CLEANUP.md"
 
 LEARNING_TOPICS = [
