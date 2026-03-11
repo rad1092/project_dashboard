@@ -1,19 +1,18 @@
-"""추천 페이지 내부 데이터 헬퍼와 추천 규칙을 검증하는 테스트."""
-
 from pathlib import Path
 
 import pytest
 
 
-def test_resolve_data_dir_uses_override(recommendation_page_module, sample_preprocessing_dir) -> None:
-    assert recommendation_page_module.resolve_data_dir(sample_preprocessing_dir) == sample_preprocessing_dir.resolve()
+def test_resolve_data_dir_uses_override(dashboard_data_module, sample_preprocessing_dir) -> None:
+    assert dashboard_data_module.resolve_data_dir(sample_preprocessing_dir) == sample_preprocessing_dir.resolve()
 
 
 def test_resolve_data_dir_prefers_env_over_secret_and_repo_local(
-    recommendation_page_module,
+    dashboard_data_module,
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    # 데이터 경로 우선순위가 바뀌면 홈/추천/분석이 전부 다른 폴더를 읽을 수 있어서 중요하다.
     env_dir = tmp_path / "env_data"
     secret_dir = tmp_path / "secret_data"
     repo_dir = tmp_path / "repo_data"
@@ -22,15 +21,15 @@ def test_resolve_data_dir_prefers_env_over_secret_and_repo_local(
         path.mkdir()
 
     monkeypatch.setenv("PREPROCESSING_DATA_DIR", str(env_dir))
-    monkeypatch.setattr(recommendation_page_module, "_maybe_get_secret_data_dir", lambda: str(secret_dir))
-    monkeypatch.setattr(recommendation_page_module, "_get_repo_default_data_dir", lambda: repo_dir)
-    monkeypatch.setattr(recommendation_page_module, "_get_desktop_default_data_dir", lambda: desktop_dir)
+    monkeypatch.setattr(dashboard_data_module, "_maybe_get_secret_data_dir", lambda: str(secret_dir))
+    monkeypatch.setattr(dashboard_data_module, "_get_repo_default_data_dir", lambda: repo_dir)
+    monkeypatch.setattr(dashboard_data_module, "_get_desktop_default_data_dir", lambda: desktop_dir)
 
-    assert recommendation_page_module.resolve_data_dir() == env_dir.resolve()
+    assert dashboard_data_module.resolve_data_dir() == env_dir.resolve()
 
 
 def test_resolve_data_dir_prefers_secret_over_repo_local(
-    recommendation_page_module,
+    dashboard_data_module,
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -41,15 +40,15 @@ def test_resolve_data_dir_prefers_secret_over_repo_local(
         path.mkdir()
 
     monkeypatch.delenv("PREPROCESSING_DATA_DIR", raising=False)
-    monkeypatch.setattr(recommendation_page_module, "_maybe_get_secret_data_dir", lambda: str(secret_dir))
-    monkeypatch.setattr(recommendation_page_module, "_get_repo_default_data_dir", lambda: repo_dir)
-    monkeypatch.setattr(recommendation_page_module, "_get_desktop_default_data_dir", lambda: desktop_dir)
+    monkeypatch.setattr(dashboard_data_module, "_maybe_get_secret_data_dir", lambda: str(secret_dir))
+    monkeypatch.setattr(dashboard_data_module, "_get_repo_default_data_dir", lambda: repo_dir)
+    monkeypatch.setattr(dashboard_data_module, "_get_desktop_default_data_dir", lambda: desktop_dir)
 
-    assert recommendation_page_module.resolve_data_dir() == secret_dir.resolve()
+    assert dashboard_data_module.resolve_data_dir() == secret_dir.resolve()
 
 
 def test_resolve_data_dir_uses_repo_local_default_when_no_override(
-    recommendation_page_module,
+    dashboard_data_module,
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -59,15 +58,15 @@ def test_resolve_data_dir_uses_repo_local_default_when_no_override(
     desktop_dir.mkdir()
 
     monkeypatch.delenv("PREPROCESSING_DATA_DIR", raising=False)
-    monkeypatch.setattr(recommendation_page_module, "_maybe_get_secret_data_dir", lambda: None)
-    monkeypatch.setattr(recommendation_page_module, "_get_repo_default_data_dir", lambda: repo_dir)
-    monkeypatch.setattr(recommendation_page_module, "_get_desktop_default_data_dir", lambda: desktop_dir)
+    monkeypatch.setattr(dashboard_data_module, "_maybe_get_secret_data_dir", lambda: None)
+    monkeypatch.setattr(dashboard_data_module, "_get_repo_default_data_dir", lambda: repo_dir)
+    monkeypatch.setattr(dashboard_data_module, "_get_desktop_default_data_dir", lambda: desktop_dir)
 
-    assert recommendation_page_module.resolve_data_dir() == repo_dir.resolve()
+    assert dashboard_data_module.resolve_data_dir() == repo_dir.resolve()
 
 
 def test_resolve_data_dir_falls_back_to_desktop_after_repo_local(
-    recommendation_page_module,
+    dashboard_data_module,
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -76,22 +75,22 @@ def test_resolve_data_dir_falls_back_to_desktop_after_repo_local(
     desktop_dir.mkdir(parents=True)
 
     monkeypatch.delenv("PREPROCESSING_DATA_DIR", raising=False)
-    monkeypatch.setattr(recommendation_page_module, "_maybe_get_secret_data_dir", lambda: None)
-    monkeypatch.setattr(recommendation_page_module, "_get_repo_default_data_dir", lambda: repo_dir)
-    monkeypatch.setattr(recommendation_page_module, "_get_desktop_default_data_dir", lambda: desktop_dir)
+    monkeypatch.setattr(dashboard_data_module, "_maybe_get_secret_data_dir", lambda: None)
+    monkeypatch.setattr(dashboard_data_module, "_get_repo_default_data_dir", lambda: repo_dir)
+    monkeypatch.setattr(dashboard_data_module, "_get_desktop_default_data_dir", lambda: desktop_dir)
 
-    assert recommendation_page_module.resolve_data_dir() == desktop_dir.resolve()
+    assert dashboard_data_module.resolve_data_dir() == desktop_dir.resolve()
 
 
 def test_load_alerts_dataframe_reports_missing_runtime_csv(
-    recommendation_page_module,
+    dashboard_data_module,
     tmp_path: Path,
 ) -> None:
     missing_base = tmp_path / "preprocessing_data"
     (missing_base / "preprocessing").mkdir(parents=True)
 
     try:
-        recommendation_page_module.load_alerts_dataframe_uncached(missing_base)
+        dashboard_data_module.load_alerts_dataframe_uncached(missing_base)
     except FileNotFoundError as exc:
         message = str(exc)
     else:
@@ -102,15 +101,15 @@ def test_load_alerts_dataframe_reports_missing_runtime_csv(
 
 
 def test_load_dataframes_read_expected_rows(
-    recommendation_page_module,
+    dashboard_data_module,
     sample_preprocessing_dir,
 ) -> None:
-    alerts_frame = recommendation_page_module.load_alerts_dataframe_uncached(sample_preprocessing_dir)
-    shelters_frame = recommendation_page_module.load_shelters_dataframe_uncached(sample_preprocessing_dir)
-    earthquake_shelters_frame = recommendation_page_module.load_earthquake_shelters_dataframe_uncached(
+    alerts_frame = dashboard_data_module.load_alerts_dataframe_uncached(sample_preprocessing_dir)
+    shelters_frame = dashboard_data_module.load_shelters_dataframe_uncached(sample_preprocessing_dir)
+    earthquake_shelters_frame = dashboard_data_module.load_earthquake_shelters_dataframe_uncached(
         sample_preprocessing_dir
     )
-    tsunami_shelters_frame = recommendation_page_module.load_tsunami_shelters_dataframe_uncached(
+    tsunami_shelters_frame = dashboard_data_module.load_tsunami_shelters_dataframe_uncached(
         sample_preprocessing_dir
     )
 
@@ -124,6 +123,7 @@ def test_recent_alerts_and_summary_follow_region(
     recommendation_page_module,
     sample_preprocessing_dir,
 ) -> None:
+    # 추천 페이지 상단 카드가 최근 특보 표와 어긋나지 않도록 둘을 같이 검증한다.
     alerts_frame = recommendation_page_module.load_alerts_dataframe_uncached(sample_preprocessing_dir)
     recent = recommendation_page_module.get_recent_alerts(
         alerts_frame,
@@ -223,6 +223,8 @@ def test_recommend_shelters_prefers_dedicated_candidates(
     recommendation_page_module,
     sample_preprocessing_dir,
 ) -> None:
+    # 지진과 해일/쓰나미처럼 전용 대피소가 있는 재난은,
+    # 통합 대피소보다 전용 대피소가 먼저 올라와야 한다.
     shelters_frame = recommendation_page_module.load_shelters_dataframe_uncached(sample_preprocessing_dir)
     earthquake_shelters_frame = recommendation_page_module.load_earthquake_shelters_dataframe_uncached(
         sample_preprocessing_dir

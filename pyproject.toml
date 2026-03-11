@@ -22,6 +22,7 @@ dependencies = [
     "sqlalchemy>=2.0.47",
     "statsmodels>=0.14.6",
     "streamlit>=1.55.0",
+    "streamlit-geolocation>=0.0.10",
 ]
 
 [dependency-groups]

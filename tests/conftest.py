@@ -1,5 +1,3 @@
-"""pytest 공통 설정과 모듈 로더, 샘플 전처리 데이터 fixture."""
-
 import importlib.util
 import os
 import sys
@@ -16,8 +14,7 @@ os.environ.setdefault("PROJECT_DASHBOARD_IMPORT_ONLY", "1")
 
 
 def load_project_module(relative_path: str, module_name: str):
-    """상대 경로의 프로젝트 파일을 import 전용 모드로 로드한다."""
-
+    # 테스트는 화면 실행이 아니라 helper 검증이 목적이라, 모든 페이지를 import-only로 읽는다.
     if module_name in sys.modules:
         return sys.modules[module_name]
 
@@ -38,44 +35,29 @@ def home_module():
 
 
 @pytest.fixture(scope="session")
-def about_page_module():
-    return load_project_module("pages/1_About.py", "project_dashboard_about")
+def dashboard_data_module():
+    return load_project_module("dashboard_data.py", "project_dashboard_data")
 
 
 @pytest.fixture(scope="session")
 def recommendation_page_module():
-    return load_project_module("pages/2_대피소_추천.py", "project_dashboard_recommendation")
-
-
-@pytest.fixture(scope="session")
-def flow_page_module():
-    return load_project_module("pages/3_작동_설명.py", "project_dashboard_flow")
+    return load_project_module("pages/1_대피소_추천.py", "project_dashboard_recommendation")
 
 
 @pytest.fixture(scope="session")
 def realtime_page_module():
-    return load_project_module("pages/4_실시간_준비.py", "project_dashboard_realtime")
-
-
-@pytest.fixture(scope="session")
-def projects_page_module():
-    return load_project_module("pages/5_Projects.py", "project_dashboard_projects")
+    return load_project_module("pages/2_실시간_테스트.py", "project_dashboard_realtime")
 
 
 @pytest.fixture(scope="session")
 def analysis_page_module():
-    return load_project_module("pages/6_Data_Analysis.py", "project_dashboard_analysis")
-
-
-@pytest.fixture(scope="session")
-def learning_page_module():
-    return load_project_module("pages/7_Learning_Log.py", "project_dashboard_learning")
+    return load_project_module("pages/3_Data_Analysis.py", "project_dashboard_analysis")
 
 
 @pytest.fixture()
 def sample_preprocessing_dir(tmp_path: Path) -> Path:
-    """테스트용 최소 전처리 데이터 폴더를 만든다."""
-
+    # 운영 CSV 전체를 들고 오지 않아도 되도록,
+    # 추천과 분석 흐름이 최소한으로 돌아갈 정도의 샘플 데이터만 만든다.
     base = tmp_path / "preprocessing_data"
     preprocessing = base / "preprocessing"
     preprocessing.mkdir(parents=True)

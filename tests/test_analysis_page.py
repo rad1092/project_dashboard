@@ -1,6 +1,3 @@
-"""분석 페이지 내부 데이터 준비와 KPI 계산을 검증하는 테스트."""
-
-
 def test_load_analysis_dataset_has_expected_columns(
     analysis_page_module,
     sample_preprocessing_dir,
@@ -27,6 +24,8 @@ def test_build_kpis_returns_summary_values(
 
 
 def test_chart_builders_return_figures(analysis_page_module, sample_preprocessing_dir) -> None:
+    # 데이터만 있으면 차트가 최소한 Figure 객체로는 만들어져야,
+    # 화면 레이아웃이 비정상적으로 깨지지 않는다.
     dataframe = analysis_page_module.load_analysis_dataset(sample_preprocessing_dir)
     shelters_frame = analysis_page_module.load_shelters_dataframe_uncached(sample_preprocessing_dir)
 

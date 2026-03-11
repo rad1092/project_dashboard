@@ -1,16 +1,9 @@
-"""홈 페이지 내부 헬퍼와 메타데이터를 검증하는 테스트."""
-
-
 def test_home_page_meta_and_copy_are_present(home_module) -> None:
     expected_keys = {
         "home",
-        "about",
         "recommendation",
-        "flow",
         "realtime",
-        "projects",
         "analysis",
-        "learning",
     }
 
     assert expected_keys.issubset(home_module.PAGE_META.keys())
@@ -19,6 +12,8 @@ def test_home_page_meta_and_copy_are_present(home_module) -> None:
 
 
 def test_home_page_builds_catalog_and_kpis(home_module, sample_preprocessing_dir) -> None:
+    # 홈 화면이 쓰는 요약 값은 전부 공용 데이터 모듈을 거쳐 나오므로,
+    # 여기서 카탈로그와 KPI가 같이 맞는지 확인해 두면 홈 회귀를 빨리 잡을 수 있다.
     alerts_frame = home_module.load_alerts_dataframe_uncached(sample_preprocessing_dir)
     shelters_frame = home_module.load_shelters_dataframe_uncached(sample_preprocessing_dir)
     earthquake_shelters_frame = home_module.load_earthquake_shelters_dataframe_uncached(
