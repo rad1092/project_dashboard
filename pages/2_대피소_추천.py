@@ -48,8 +48,7 @@ RAW_TO_GROUP = {
     "지진해일/쓰나미": "해일/쓰나미",
     "호우": "호우/태풍",
     "태풍": "호우/태풍",
-    "강풍": "강풍/풍랑",
-    "풍랑": "강풍/풍랑",
+    "강풍": "강풍",
     "폭염": "폭염",
     "한파": "한파",
     "대설": "대설",
@@ -58,7 +57,7 @@ RAW_TO_GROUP = {
 
 DEFAULT_DISASTER_OPTIONS = [
     "호우/태풍",
-    "강풍/풍랑",
+    "강풍",
     "폭염",
     "한파",
     "대설",
@@ -630,7 +629,7 @@ def recommend_shelters(
             )
         )
 
-    needs_fallback = disaster_group in {"호우/태풍", "강풍/풍랑", "대설", "건조", "기타"}
+    needs_fallback = disaster_group in {"호우/태풍", "강풍", "대설", "건조", "기타"}
     if needs_fallback or len(primary_candidates) < top_n:
         fallback_candidates = _build_fallback_candidates(
             shelters_frame,
