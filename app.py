@@ -37,6 +37,10 @@ PAGE_META = {
         "label": "2. 실시간 테스트",
         "summary": "브라우저 위치와 OSRM 도보 경로를 현재 추천 흐름에 붙여 테스트한다.",
     },
+    "message_guidance": {
+        "label": "4. 재난문자 대피 안내",
+        "summary": "크롤링된 최근 재난문자를 현재 위치와 연결해 대피소와 경로를 안내한다.",
+    },
     "analysis": {
         "label": "3. Data Analysis",
         "summary": "과거 특보 이력과 대피소 분포를 분석 관점에서 요약한다.",
@@ -46,7 +50,7 @@ PAGE_META = {
 HOME_OVERVIEW_POINTS = [
     "과거 특보 이력과 대피소 좌표를 함께 읽어 현재 위치 기준의 대피소 추천 흐름을 제공한다.",
     "지진/해일 전용 대피소와 통합 대피소를 구분해 상황별 우선순위를 적용한다.",
-    "추천 화면, 실험 화면, 분석 화면을 분리해 결과와 근거를 함께 확인할 수 있게 한다.",
+    "추천 화면, 실험 화면, 재난문자 안내, 분석 화면을 분리해 결과와 근거를 함께 확인할 수 있게 한다.",
 ]
 
 LIMITATIONS = [
@@ -67,7 +71,7 @@ def render_page() -> None:
     )
 
     st.title(PAGE_META["home"]["label"])
-    st.write("이 앱은 전처리된 재난 특보 이력과 대피소 데이터를 바탕으로 추천, 실시간 테스트, 분석 화면을 함께 제공한다.")
+    st.write("이 앱은 전처리된 재난 특보 이력, 대피소 데이터, 크롤링된 재난문자를 바탕으로 추천, 실시간 테스트, 재난문자 안내, 분석 화면을 함께 제공한다.")
     st.caption("현재는 과거 데이터 기준으로 동작하며, 각 페이지는 같은 데이터 계약 위에서 역할만 나눠 보여준다.")
 
     try:
@@ -114,8 +118,8 @@ def render_page() -> None:
 
     with st.container(border=True):
         st.subheader("페이지 이동")
-        page_columns = st.columns(3, gap="large")
-        for index, page_key in enumerate(["recommendation", "realtime", "analysis"]):
+        page_columns = st.columns(4, gap="large")
+        for index, page_key in enumerate(["recommendation", "realtime", "message_guidance", "analysis"]):
             page = PAGE_META[page_key]
             with page_columns[index]:
                 with st.container(border=True):

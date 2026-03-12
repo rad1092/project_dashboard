@@ -40,8 +40,18 @@ def dashboard_data_module():
 
 
 @pytest.fixture(scope="session")
+def crawler_alerts_data_module():
+    return load_project_module("crawler_alerts_data.py", "project_dashboard_crawler_alerts")
+
+
+@pytest.fixture(scope="session")
 def recommendation_page_module():
     return load_project_module("pages/1_대피소_추천.py", "project_dashboard_recommendation")
+
+
+@pytest.fixture(scope="session")
+def realtime_support_module():
+    return load_project_module("realtime_support.py", "project_dashboard_realtime_support")
 
 
 @pytest.fixture(scope="session")
@@ -54,6 +64,11 @@ def analysis_page_module():
     return load_project_module("pages/3_Data_Analysis.py", "project_dashboard_analysis")
 
 
+@pytest.fixture(scope="session")
+def message_guidance_page_module():
+    return load_project_module("pages/4_재난문자_대피_안내.py", "project_dashboard_message_guidance")
+
+
 @pytest.fixture()
 def sample_preprocessing_dir(tmp_path: Path) -> Path:
     # 운영 CSV 전체를 들고 오지 않아도 되도록,
@@ -61,6 +76,8 @@ def sample_preprocessing_dir(tmp_path: Path) -> Path:
     base = tmp_path / "preprocessing_data"
     preprocessing = base / "preprocessing"
     preprocessing.mkdir(parents=True)
+    crawler_data = base / "preprocessing_code" / "data"
+    crawler_data.mkdir(parents=True)
 
     pd.DataFrame(
         [
@@ -168,5 +185,50 @@ def sample_preprocessing_dir(tmp_path: Path) -> Path:
             }
         ]
     ).to_csv(preprocessing / "tsunami_shelter_clean_2.csv", index=False, encoding="utf-8-sig")
+
+    pd.DataFrame(
+        [
+            {
+                "발표시각": "2026-03-06 14:00",
+                "지역": "경북",
+                "시군구": "포항",
+                "재난종류": "호우",
+                "특보등급": "경보",
+                "내용": "포항 호우 경보 발령",
+                "발송기관": "포항시",
+                "번호": "101",
+            },
+            {
+                "발표시각": "2026-03-06 13:30",
+                "지역": "경북",
+                "시군구": "포항",
+                "재난종류": "해일",
+                "특보등급": "주의보",
+                "내용": "포항 연안 해일 주의",
+                "발송기관": "포항시",
+                "번호": "102",
+            },
+            {
+                "발표시각": "2026-03-06 12:30",
+                "지역": "부산",
+                "시군구": "해운대구",
+                "재난종류": "풍랑",
+                "특보등급": "주의보",
+                "내용": "부산 연안 풍랑 주의",
+                "발송기관": "부산광역시",
+                "번호": "103",
+            },
+            {
+                "발표시각": "2026-03-06 11:00",
+                "지역": "경남",
+                "시군구": "창원",
+                "재난종류": "황사",
+                "특보등급": "주의보",
+                "내용": "경남 황사 주의",
+                "발송기관": "창원시",
+                "번호": "104",
+            },
+        ]
+    ).to_csv(crawler_data / "disaster_message_realtime.csv", index=False, encoding="utf-8-sig")
 
     return base

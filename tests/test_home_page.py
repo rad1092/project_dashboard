@@ -3,6 +3,7 @@ def test_home_page_meta_and_copy_are_present(home_module) -> None:
         "home",
         "recommendation",
         "realtime",
+        "message_guidance",
         "analysis",
     }
 
