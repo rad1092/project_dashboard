@@ -45,6 +45,10 @@ PAGE_META = {
         "label": "4. Data Analysis",
         "summary": "과거 특보 이력과 대피소 분포를 분석 관점에서 요약한다.",
     },
+    "shelter_map": {
+        "label": "5. 부울경 대피소 맵",
+        "summary": "부산·울산·경남 대피소 유형 지도를 인터랙티브 HTML로 그대로 보여준다.",
+    },
 }
 
 HOME_OVERVIEW_POINTS = [
@@ -118,13 +122,18 @@ def render_page() -> None:
 
     with st.container(border=True):
         st.subheader("페이지 이동")
-        page_columns = st.columns(4, gap="large")
-        for index, page_key in enumerate(["recommendation", "realtime", "message_guidance", "analysis"]):
-            page = PAGE_META[page_key]
-            with page_columns[index]:
-                with st.container(border=True):
-                    st.markdown(f"**{page['label']}**")
-                    st.write(page["summary"])
+        page_rows = [
+            ["recommendation", "realtime", "message_guidance"],
+            ["analysis", "shelter_map"],
+        ]
+        for page_keys in page_rows:
+            page_columns = st.columns(len(page_keys), gap="large")
+            for index, page_key in enumerate(page_keys):
+                page = PAGE_META[page_key]
+                with page_columns[index]:
+                    with st.container(border=True):
+                        st.markdown(f"**{page['label']}**")
+                        st.write(page["summary"])
 
     bottom_left, bottom_right = st.columns([1.0, 1.0], gap="large")
 
