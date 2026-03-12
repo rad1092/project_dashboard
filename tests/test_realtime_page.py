@@ -14,19 +14,19 @@ class DummyResponse:
         return self._payload
 
 
-def test_get_browser_or_manual_coordinates_reads_session_values(realtime_support_module) -> None:
+def test_get_browser_or_manual_coordinates_reads_session_values(realtime_page_module) -> None:
     state = {"realtime_lat": "35.6432", "realtime_lon": "129.3621"}
 
-    assert realtime_support_module.get_browser_or_manual_coordinates(state) == (35.6432, 129.3621)
+    assert realtime_page_module.get_browser_or_manual_coordinates(state) == (35.6432, 129.3621)
 
 
-def test_get_browser_or_manual_coordinates_returns_none_for_invalid_values(realtime_support_module) -> None:
+def test_get_browser_or_manual_coordinates_returns_none_for_invalid_values(realtime_page_module) -> None:
     state = {"realtime_lat": "north", "realtime_lon": 129.3621}
 
-    assert realtime_support_module.get_browser_or_manual_coordinates(state) is None
+    assert realtime_page_module.get_browser_or_manual_coordinates(state) is None
 
 
-def test_get_osrm_route_detail_normalizes_payload(realtime_support_module, monkeypatch) -> None:
+def test_get_osrm_route_detail_normalizes_payload(realtime_page_module, monkeypatch) -> None:
     payload = {
         "code": "Ok",
         "routes": [
@@ -47,9 +47,9 @@ def test_get_osrm_route_detail_normalizes_payload(realtime_support_module, monke
         captured["timeout"] = timeout
         return DummyResponse(payload)
 
-    monkeypatch.setattr(realtime_support_module.requests, "get", fake_get)
+    monkeypatch.setattr(realtime_page_module.requests, "get", fake_get)
 
-    result = realtime_support_module._get_osrm_route_detail(
+    result = realtime_page_module._get_osrm_route_detail(
         origin={"x": 129.36, "y": 35.65},
         destination={"x": 129.35, "y": 35.64, "key": "dest-0"},
         base_url="http://localhost:5000/",
@@ -62,7 +62,7 @@ def test_get_osrm_route_detail_normalizes_payload(realtime_support_module, monke
         "geometries": "geojson",
         "steps": "false",
     }
-    assert captured["timeout"] == realtime_support_module.OSRM_ROUTE_TIMEOUT_S
+    assert captured["timeout"] == realtime_page_module.OSRM_ROUTE_TIMEOUT_S
     assert result == {
         "destination_key": "dest-0",
         "route_distance_m": 2500,
@@ -72,7 +72,7 @@ def test_get_osrm_route_detail_normalizes_payload(realtime_support_module, monke
     }
 
 
-def test_build_route_bundle_sorts_osrm_routes_and_falls_back(realtime_support_module, monkeypatch) -> None:
+def test_build_route_bundle_sorts_osrm_routes_and_falls_back(realtime_page_module, monkeypatch) -> None:
     recommendations = pd.DataFrame(
         [
             {
@@ -141,9 +141,9 @@ def test_build_route_bundle_sorts_osrm_routes_and_falls_back(realtime_support_mo
             "source": "osrm",
         }
 
-    monkeypatch.setattr(realtime_support_module, "_get_osrm_route_detail", fake_get_osrm_route_detail)
+    monkeypatch.setattr(realtime_page_module, "_get_osrm_route_detail", fake_get_osrm_route_detail)
 
-    ordered, route_details, warnings = realtime_support_module._build_route_bundle(
+    ordered, route_details, warnings = realtime_page_module._build_route_bundle(
         recommendations,
         user_latitude=35.64,
         user_longitude=129.36,
@@ -159,7 +159,7 @@ def test_build_route_bundle_sorts_osrm_routes_and_falls_back(realtime_support_mo
     assert warnings == ["B 대피소 도보 경로 조회 실패: no route"]
 
 
-def test_build_route_bundle_uses_straight_line_when_osrm_is_missing(realtime_support_module) -> None:
+def test_build_route_bundle_uses_straight_line_when_osrm_is_missing(realtime_page_module) -> None:
     recommendations = pd.DataFrame(
         [
             {
@@ -180,7 +180,7 @@ def test_build_route_bundle_uses_straight_line_when_osrm_is_missing(realtime_sup
     )
     dummy_page2 = SimpleNamespace(haversine_km=lambda *args: 1.5)
 
-    ordered, route_details, warnings = realtime_support_module._build_route_bundle(
+    ordered, route_details, warnings = realtime_page_module._build_route_bundle(
         recommendations,
         user_latitude=35.64,
         user_longitude=129.36,
@@ -194,7 +194,7 @@ def test_build_route_bundle_uses_straight_line_when_osrm_is_missing(realtime_sup
     assert warnings == ["OSRM_BASE_URL 설정이 없어 직선 fallback 경로를 표시합니다."]
 
 
-def test_build_realtime_recommendation_map_returns_folium_map(realtime_support_module) -> None:
+def test_build_realtime_recommendation_map_returns_folium_map(realtime_page_module) -> None:
     recommendations = pd.DataFrame(
         [
             {
@@ -246,7 +246,7 @@ def test_build_realtime_recommendation_map_returns_folium_map(realtime_support_m
         },
     ]
 
-    result = realtime_support_module.build_realtime_recommendation_map(
+    result = realtime_page_module.build_realtime_recommendation_map(
         35.64,
         129.36,
         recommendations,
@@ -258,7 +258,7 @@ def test_build_realtime_recommendation_map_returns_folium_map(realtime_support_m
     assert any(child.__class__.__name__ == "PolyLine" for child in result._children.values())
 
 
-def test_realtime_page_module_imports(realtime_page_module, realtime_support_module) -> None:
+def test_realtime_page_module_imports(realtime_page_module) -> None:
     assert realtime_page_module.PAGE_LABEL == "실시간 테스트"
     assert hasattr(realtime_page_module, "render_page")
-    assert realtime_page_module._build_route_bundle is realtime_support_module._build_route_bundle
+    assert hasattr(realtime_page_module, "_build_route_bundle")

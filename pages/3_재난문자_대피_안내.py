@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import importlib.util
 import math
 import os
-from collections.abc import Mapping, MutableMapping
+import sys
+from collections.abc import Callable, Mapping, MutableMapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -20,13 +22,11 @@ try:
 except Exception:  # pragma: no cover - optional dependency fallback
     streamlit_geolocation = None
 
-ALERT_COLUMNS = ["발표시간", "지역", "시군구", "재난종류", "특보등급", "해당지역"]
 SHELTER_COLUMNS = ["대피소명", "주소", "대피소유형", "위도", "경도", "시도", "시군구", "지역", "수용인원"]
 EARTHQUAKE_COLUMNS = ["대피소명", "주소", "위도", "경도", "수용인원", "시도", "시군구"]
 TSUNAMI_COLUMNS = ["대피소명", "주소", "위도", "경도", "수용인원", "지역", "시도", "시군구"]
 
 DATASET_FILE_MAP = {
-    "alerts": Path("preprocessing") / "danger_clean.csv",
     "shelters": Path("preprocessing") / "final_shelter_dataset.csv",
     "earthquake_shelters": Path("preprocessing") / "earthquake_shelter_clean_2.csv",
     "tsunami_shelters": Path("preprocessing") / "tsunami_shelter_clean_2.csv",
@@ -37,33 +37,35 @@ SPECIAL_SHELTER_TYPE_LABELS = {
     "tsunami_shelter_clean_2.csv": "해일대피장소",
 }
 
-RAW_TO_GROUP = {
-    "지진": "지진",
-    "지진해일": "해일/쓰나미",
-    "쓰나미": "해일/쓰나미",
-    "지진해일/쓰나미": "해일/쓰나미",
-    "호우": "호우/태풍",
-    "태풍": "호우/태풍",
-    "강풍": "강풍/풍랑",
-    "풍랑": "강풍/풍랑",
-    "폭염": "폭염",
-    "한파": "한파",
-    "대설": "대설",
-    "건조": "건조",
-}
-
-DEFAULT_DISASTER_OPTIONS = [
-    "호우/태풍",
-    "강풍/풍랑",
-    "폭염",
-    "한파",
-    "대설",
-    "건조",
-    "지진",
-    "해일/쓰나미",
+CRAWLED_ALERT_COLUMNS = [
+    "발표시각",
+    "지역",
+    "시군구",
+    "재난종류",
+    "특보등급",
+    "내용",
+    "발송기관",
+    "번호",
 ]
+(
+    PUBLISHED_AT_COLUMN,
+    REGION_COLUMN,
+    SIGUNGU_COLUMN,
+    DISASTER_TYPE_COLUMN,
+    ALERT_LEVEL_COLUMN,
+    CONTENT_COLUMN,
+    SENDER_COLUMN,
+    NUMBER_COLUMN,
+) = CRAWLED_ALERT_COLUMNS
+SIGUNGU_NORMALIZED_COLUMN = "시군구정규화"
+DISASTER_GROUP_COLUMN = "재난그룹"
+ALERT_KEY_COLUMN = "alert_key"
+SUPPORTED_CRAWLED_REGIONS = ["대구", "울산", "부산", "경북", "경남"]
+COLUMN_ALIASES = {"발표시간": PUBLISHED_AT_COLUMN}
 
-PAGE_LABEL = "실시간 테스트"
+PAGE_LABEL = "재난문자 대피 안내"
+STATE_PREFIX = "message_guidance"
+EMPTY_OPTION_KEY = "__empty__"
 OSRM_BASE_URL_KEY = "OSRM_BASE_URL"
 DEFAULT_OSRM_BASE_URL = "http://router.project-osrm.org"
 DEFAULT_OSRM_PROFILE = "foot"
@@ -74,6 +76,9 @@ OFFICIAL_GUIDANCE_MESSAGE = (
 )
 TSUNAMI_ETA_WARNING_MESSAGE = "예상 시간은 보행 기준 추정치이며 실제 대피 상황과 다를 수 있습니다."
 RANK_COLORS = ["#0f766e", "#1d4ed8", "#f59e0b"]
+CRAWLING_MODULE_NAME = "project_dashboard_live_crawling_runtime"
+CRAWLING_MODULE_PATH = Path(__file__).resolve().parents[1] / "preprocessing_code" / "crawling.py"
+DEFAULT_CRAWLING_WAIT_SECONDS = 15
 
 RECOMMENDATION_RESULT_COLUMNS = [
     "대피소명",
@@ -172,19 +177,6 @@ def _validate_columns(dataframe: pd.DataFrame, expected_columns: list[str], labe
         raise ValueError(f"{label} CSV 에 필요한 컬럼이 없다: {missing_columns}")
 
 
-def _prepare_alerts(dataframe: pd.DataFrame) -> pd.DataFrame:
-    _validate_columns(dataframe, ALERT_COLUMNS, "danger_clean.csv")
-
-    alerts = dataframe.copy()
-    alerts["발표시간"] = pd.to_datetime(alerts["발표시간"], errors="coerce")
-    alerts["지역"] = alerts["지역"].astype(str).str.strip()
-    alerts["시군구"] = alerts["시군구"].astype(str).str.strip()
-    alerts["시군구정규화"] = alerts["시군구"].map(normalize_sigungu_name)
-    alerts["재난종류"] = alerts["재난종류"].astype(str).str.strip()
-    alerts["특보등급"] = alerts["특보등급"].fillna("미분류").astype(str).str.strip()
-    return alerts.dropna(subset=["발표시간"]).sort_values("발표시간").reset_index(drop=True)
-
-
 def _prepare_shelters(dataframe: pd.DataFrame) -> pd.DataFrame:
     _validate_columns(dataframe, SHELTER_COLUMNS, "final_shelter_dataset.csv")
 
@@ -221,16 +213,6 @@ def _prepare_special_shelters(
     shelters["대피소유형"] = SPECIAL_SHELTER_TYPE_LABELS[label]
     shelters["수용인원_정렬값"] = shelters["수용인원"].fillna(0)
     return shelters.dropna(subset=["위도", "경도"]).reset_index(drop=True)
-
-
-def load_alerts_dataframe_uncached(path_override: str | Path | None = None) -> pd.DataFrame:
-    data_dir = resolve_data_dir(path_override)
-    return _prepare_alerts(_read_csv(data_dir / DATASET_FILE_MAP["alerts"]))
-
-
-@st.cache_data(show_spinner=False)
-def load_alerts_dataframe(path_override: str | None = None) -> pd.DataFrame:
-    return load_alerts_dataframe_uncached(path_override)
 
 
 def load_shelters_dataframe_uncached(path_override: str | Path | None = None) -> pd.DataFrame:
@@ -273,14 +255,6 @@ def load_tsunami_shelters_dataframe_uncached(
 @st.cache_data(show_spinner=False)
 def load_tsunami_shelters_dataframe(path_override: str | None = None) -> pd.DataFrame:
     return load_tsunami_shelters_dataframe_uncached(path_override)
-
-
-def classify_disaster_type(disaster_name: str | None) -> str:
-    if disaster_name is None:
-        return "기타"
-
-    text = str(disaster_name).strip()
-    return RAW_TO_GROUP.get(text, text if text in DEFAULT_DISASTER_OPTIONS else "기타")
 
 
 def _build_region_centers(shelters_frame: pd.DataFrame) -> pd.DataFrame:
@@ -348,58 +322,6 @@ def get_region_center(
         return None, None
 
     return float(filtered["중심위도"].mean()), float(filtered["중심경도"].mean())
-
-
-def get_recent_alerts(
-    alerts_frame: pd.DataFrame,
-    sido: str,
-    sigungu: str | None = None,
-    limit: int = 5,
-) -> pd.DataFrame:
-    filtered = alerts_frame[alerts_frame["지역"] == sido]
-    if sigungu:
-        filtered = filtered[filtered["시군구정규화"] == normalize_sigungu_name(sigungu)]
-        if filtered.empty:
-            filtered = alerts_frame[alerts_frame["지역"] == sido]
-    return filtered.sort_values("발표시간", ascending=False).head(limit).reset_index(drop=True)
-
-
-def build_alert_summary(
-    alerts_frame: pd.DataFrame,
-    sido: str,
-    sigungu: str | None = None,
-) -> dict[str, object]:
-    recent_alerts = get_recent_alerts(alerts_frame, sido=sido, sigungu=sigungu, limit=5)
-    if recent_alerts.empty:
-        return {
-            "latest_time": None,
-            "latest_disaster": None,
-            "alert_count": 0,
-            "hazards": [],
-        }
-
-    return {
-        "latest_time": pd.Timestamp(recent_alerts.iloc[0]["발표시간"]),
-        "latest_disaster": str(recent_alerts.iloc[0]["재난종류"]),
-        "alert_count": int(len(recent_alerts)),
-        "hazards": recent_alerts["재난종류"].dropna().astype(str).unique().tolist(),
-    }
-
-
-def get_disaster_options(alerts_frame: pd.DataFrame, sido: str, sigungu: str) -> list[str]:
-    recent_alerts = get_recent_alerts(alerts_frame, sido=sido, sigungu=sigungu, limit=10)
-    options = [classify_disaster_type(value) for value in recent_alerts["재난종류"].tolist()]
-    options.extend(DEFAULT_DISASTER_OPTIONS)
-
-    deduplicated: list[str] = []
-    for item in options:
-        if item not in deduplicated:
-            deduplicated.append(item)
-    return deduplicated
-
-
-def should_compute_recommendations(selected_disaster: str | None) -> bool:
-    return selected_disaster is not None and str(selected_disaster).strip() != ""
 
 
 def haversine_km(
@@ -567,6 +489,7 @@ def recommend_shelters(
                 reason_prefix="전용 후보만으로는 부족하거나 전용 정의가 없어 통합 대피장소를 함께 조회했고, ",
             )
         )
+
     if not scored_frames:
         return pd.DataFrame(columns=RECOMMENDATION_RESULT_COLUMNS)
 
@@ -583,17 +506,228 @@ def recommend_shelters(
     return standardized.head(top_n).reset_index(drop=True)
 
 
-def _state_key(prefix: str, name: str) -> str:
-    return f"{prefix}_{name}"
+def resolve_crawled_alerts_path(path_override: str | Path | None = None) -> Path:
+    if path_override is None:
+        return Path(__file__).resolve().parents[1] / "preprocessing_code" / "data" / "disaster_message_realtime.csv"
+
+    candidate = Path(path_override).expanduser().resolve()
+    if candidate.is_dir():
+        nested_path = candidate / "preprocessing_code" / "data" / "disaster_message_realtime.csv"
+        if nested_path.exists():
+            return nested_path
+
+        flat_path = candidate / "disaster_message_realtime.csv"
+        if flat_path.exists():
+            return flat_path
+
+        return nested_path
+
+    return candidate
+
+
+def map_crawled_disaster_group(disaster_type: str | None) -> str:
+    if disaster_type is None:
+        return "기타"
+
+    text = str(disaster_type).strip()
+    mapping = {
+        "호우": "호우/태풍",
+        "태풍": "호우/태풍",
+        "호우/태풍": "호우/태풍",
+        "강풍": "강풍/풍랑",
+        "풍랑": "강풍/풍랑",
+        "강풍/풍랑": "강풍/풍랑",
+        "폭염": "폭염",
+        "한파": "한파",
+        "대설": "대설",
+        "건조": "건조",
+        "지진": "지진",
+        "해일": "해일/쓰나미",
+        "지진해일": "해일/쓰나미",
+        "쓰나미": "해일/쓰나미",
+        "해일/쓰나미": "해일/쓰나미",
+    }
+    return mapping.get(text, "기타")
+
+
+def build_empty_crawled_alerts_dataframe() -> pd.DataFrame:
+    alerts = pd.DataFrame({column: pd.Series(dtype="object") for column in CRAWLED_ALERT_COLUMNS})
+    alerts[PUBLISHED_AT_COLUMN] = pd.Series(dtype="datetime64[ns]")
+    alerts[SIGUNGU_NORMALIZED_COLUMN] = pd.Series(dtype="object")
+    alerts[DISASTER_GROUP_COLUMN] = pd.Series(dtype="object")
+    alerts[ALERT_KEY_COLUMN] = pd.Series(dtype="object")
+    return alerts
+
+
+def load_crawling_module():
+    if CRAWLING_MODULE_NAME in sys.modules:
+        return sys.modules[CRAWLING_MODULE_NAME]
+
+    if not CRAWLING_MODULE_PATH.exists():
+        raise FileNotFoundError(f"크롤링 모듈이 없다: {CRAWLING_MODULE_PATH}")
+
+    spec = importlib.util.spec_from_file_location(CRAWLING_MODULE_NAME, CRAWLING_MODULE_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load module from {CRAWLING_MODULE_PATH}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[CRAWLING_MODULE_NAME] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(CRAWLING_MODULE_NAME, None)
+        raise
+    return module
+
+
+def _validate_crawled_columns(dataframe: pd.DataFrame, *, source_name: str) -> None:
+    missing_columns = [column for column in CRAWLED_ALERT_COLUMNS if column not in dataframe.columns]
+    if missing_columns:
+        raise ValueError(f"{source_name} 에 필요한 컬럼이 없다: {missing_columns}")
+
+
+def _coerce_crawled_alert_columns(dataframe: pd.DataFrame) -> pd.DataFrame:
+    normalized = dataframe.copy()
+    rename_map = {
+        source_name: target_name
+        for source_name, target_name in COLUMN_ALIASES.items()
+        if source_name in normalized.columns and target_name not in normalized.columns
+    }
+    if rename_map:
+        normalized = normalized.rename(columns=rename_map)
+    return normalized
+
+
+def _build_alert_key(row: pd.Series) -> str:
+    return "|".join(
+        [
+            str(row.get(NUMBER_COLUMN, "")).strip(),
+            str(row.get(PUBLISHED_AT_COLUMN, "")).strip(),
+            str(row.get(REGION_COLUMN, "")).strip(),
+            str(row.get(SIGUNGU_COLUMN, "")).strip(),
+            str(row.get(CONTENT_COLUMN, "")).strip(),
+        ]
+    )
+
+
+def _prepare_crawled_alerts_dataframe(dataframe: pd.DataFrame) -> pd.DataFrame:
+    alerts = dataframe[CRAWLED_ALERT_COLUMNS].copy()
+    alerts[PUBLISHED_AT_COLUMN] = pd.to_datetime(alerts[PUBLISHED_AT_COLUMN], errors="coerce")
+    for column in [
+        REGION_COLUMN,
+        SIGUNGU_COLUMN,
+        DISASTER_TYPE_COLUMN,
+        ALERT_LEVEL_COLUMN,
+        CONTENT_COLUMN,
+        SENDER_COLUMN,
+        NUMBER_COLUMN,
+    ]:
+        alerts[column] = alerts[column].fillna("").astype(str).str.strip()
+
+    alerts[SIGUNGU_NORMALIZED_COLUMN] = alerts[SIGUNGU_COLUMN].map(normalize_sigungu_name)
+    alerts[DISASTER_GROUP_COLUMN] = alerts[DISASTER_TYPE_COLUMN].map(map_crawled_disaster_group)
+    alerts[ALERT_KEY_COLUMN] = alerts.apply(_build_alert_key, axis=1)
+    alerts = alerts.dropna(subset=[PUBLISHED_AT_COLUMN]).sort_values(PUBLISHED_AT_COLUMN).reset_index(drop=True)
+    return alerts
+
+
+def load_crawled_alerts_dataframe_uncached(path_override: str | Path | None = None) -> pd.DataFrame:
+    path = resolve_crawled_alerts_path(path_override)
+    try:
+        dataframe = pd.read_csv(path, encoding="utf-8-sig")
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(f"크롤링 재난문자 CSV가 없다: {path}") from exc
+
+    normalized = _coerce_crawled_alert_columns(dataframe)
+    _validate_crawled_columns(normalized, source_name="disaster_message_realtime.csv")
+    return _prepare_crawled_alerts_dataframe(normalized)
+
+
+def load_live_crawled_alerts_dataframe_uncached(*, headless: bool = True) -> pd.DataFrame:
+    crawling_module = load_crawling_module()
+    options = crawling_module.Options()
+    if headless:
+        options.add_argument("--headless=new")
+    options.add_argument("--window-size=1600,1200")
+
+    driver = None
+    try:
+        driver = crawling_module.webdriver.Chrome(options=options)
+        wait = crawling_module.WebDriverWait(driver, DEFAULT_CRAWLING_WAIT_SECONDS)
+        driver.get(crawling_module.BASE_URL)
+        dataframe = crawling_module.crawl_one_page(driver, wait)
+    except Exception as exc:
+        raise RuntimeError(f"실시간 재난문자 크롤링 실행 실패: {exc}") from exc
+    finally:
+        if driver is not None:
+            try:
+                driver.quit()
+            except Exception:
+                pass
+
+    if not isinstance(dataframe, pd.DataFrame):
+        raise RuntimeError("실시간 재난문자 크롤링 결과가 DataFrame이 아니다.")
+
+    normalized = _coerce_crawled_alert_columns(dataframe)
+    _validate_crawled_columns(normalized, source_name="preprocessing_code/crawling.py 결과")
+    return _prepare_crawled_alerts_dataframe(normalized)
+
+
+def get_recent_crawled_alerts(
+    dataframe: pd.DataFrame,
+    sido: str,
+    sigungu: str | None = None,
+    limit: int = 5,
+) -> pd.DataFrame:
+    filtered = dataframe[dataframe[REGION_COLUMN] == sido]
+    if sigungu:
+        filtered = filtered[filtered[SIGUNGU_NORMALIZED_COLUMN] == normalize_sigungu_name(sigungu)]
+        if filtered.empty:
+            filtered = dataframe[dataframe[REGION_COLUMN] == sido]
+
+    return filtered.sort_values(PUBLISHED_AT_COLUMN, ascending=False).head(limit).reset_index(drop=True)
+
+
+def select_default_crawled_alert(
+    dataframe: pd.DataFrame,
+    sido: str,
+    sigungu: str | None = None,
+) -> dict[str, object] | None:
+    recent_alerts = get_recent_crawled_alerts(dataframe, sido=sido, sigungu=sigungu, limit=1)
+    if recent_alerts.empty:
+        return None
+
+    return recent_alerts.iloc[0].to_dict()
+
+
+def _state_key(name: str) -> str:
+    return f"{STATE_PREFIX}_{name}"
+
+
+def load_prefixed_session_value(
+    session_state: MutableMapping[str, object],
+    *,
+    prefix: str,
+    name: str,
+    loader: Callable[[], Any],
+    force_refresh: bool = False,
+) -> Any:
+    value_key = f"{prefix}_{name}"
+    updated_key = f"{prefix}_{name}_updated_at"
+    if force_refresh or value_key not in session_state:
+        session_state[value_key] = loader()
+        session_state[updated_key] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    session_state.setdefault(updated_key, "-")
+    return session_state[value_key]
 
 
 def get_browser_or_manual_coordinates(
     session_state: MutableMapping[str, object],
     *,
-    prefix: str = "realtime",
+    prefix: str,
 ) -> tuple[float, float] | None:
-    latitude = session_state.get(_state_key(prefix, "lat"))
-    longitude = session_state.get(_state_key(prefix, "lon"))
+    latitude = session_state.get(f"{prefix}_lat")
+    longitude = session_state.get(f"{prefix}_lon")
     if latitude in (None, "") or longitude in (None, ""):
         return None
 
@@ -680,10 +814,6 @@ def evaluate_tsunami_actionability(
     return result
 
 
-def current_timestamp_label() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
 def format_location_source_label(source: object) -> str:
     source_value = str(source or "")
     if source_value == "browser":
@@ -696,11 +826,11 @@ def format_location_source_label(source: object) -> str:
 def apply_browser_location(
     location_payload: object,
     *,
-    prefix: str = "realtime",
+    prefix: str,
     session_state: MutableMapping[str, object] | None = None,
 ) -> None:
     state = session_state if session_state is not None else st.session_state
-    if state.get(_state_key(prefix, "location_mode")) != "auto":
+    if state.get(f"{prefix}_location_mode") != "auto":
         return
 
     if not isinstance(location_payload, dict):
@@ -712,41 +842,41 @@ def apply_browser_location(
         return
 
     try:
-        state[_state_key(prefix, "lat")] = float(latitude)
-        state[_state_key(prefix, "lon")] = float(longitude)
+        state[f"{prefix}_lat"] = float(latitude)
+        state[f"{prefix}_lon"] = float(longitude)
     except (TypeError, ValueError):
         return
 
-    state[_state_key(prefix, "location_source")] = "browser"
-    state[_state_key(prefix, "location_updated_at")] = current_timestamp_label()
+    state[f"{prefix}_location_source"] = "browser"
+    state[f"{prefix}_location_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def mark_manual_location(
     *,
-    prefix: str = "realtime",
+    prefix: str,
     session_state: MutableMapping[str, object] | None = None,
 ) -> None:
     state = session_state if session_state is not None else st.session_state
-    state[_state_key(prefix, "location_mode")] = "manual"
-    state[_state_key(prefix, "location_source")] = "manual"
-    state[_state_key(prefix, "location_updated_at")] = current_timestamp_label()
+    state[f"{prefix}_location_mode"] = "manual"
+    state[f"{prefix}_location_source"] = "manual"
+    state[f"{prefix}_location_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def sync_default_coordinates(
     shelters_frame: pd.DataFrame,
     *,
-    prefix: str = "realtime",
+    prefix: str,
     session_state: MutableMapping[str, object] | None = None,
     default_sido: str = "울산",
     default_sigungu: str = "북구",
     fallback_coordinates: tuple[float, float] = (35.633, 129.365),
 ) -> None:
     state = session_state if session_state is not None else st.session_state
-    state.setdefault(_state_key(prefix, "location_mode"), "auto")
-    state.setdefault(_state_key(prefix, "location_source"), "fallback")
-    state.setdefault(_state_key(prefix, "location_updated_at"), "-")
+    state.setdefault(f"{prefix}_location_mode", "auto")
+    state.setdefault(f"{prefix}_location_source", "fallback")
+    state.setdefault(f"{prefix}_location_updated_at", "-")
 
-    if _state_key(prefix, "lat") in state and _state_key(prefix, "lon") in state:
+    if f"{prefix}_lat" in state and f"{prefix}_lon" in state:
         return
 
     default_latitude, default_longitude = get_region_center(
@@ -757,9 +887,9 @@ def sync_default_coordinates(
     if default_latitude is None or default_longitude is None:
         default_latitude, default_longitude = fallback_coordinates
 
-    state[_state_key(prefix, "lat")] = float(default_latitude)
-    state[_state_key(prefix, "lon")] = float(default_longitude)
-    state[_state_key(prefix, "location_source")] = "fallback"
+    state[f"{prefix}_lat"] = float(default_latitude)
+    state[f"{prefix}_lon"] = float(default_longitude)
+    state[f"{prefix}_location_source"] = "fallback"
 
 
 def get_osrm_config() -> tuple[str, str]:
@@ -851,20 +981,12 @@ def _get_osrm_route_detail(
 def _build_straight_line_route_detail(
     origin: Mapping[str, object],
     destination: Mapping[str, object],
-    page2_module=None,
     *,
     reason: str = "",
 ) -> dict[str, object]:
     normalized_origin = _normalize_point(origin)
     normalized_destination = _normalize_point(destination)
-    if page2_module is None:
-        page_module = globals()
-        haversine_function = page_module["haversine_km"]
-    elif isinstance(page2_module, dict):
-        haversine_function = page2_module["haversine_km"]
-    else:
-        haversine_function = page2_module.haversine_km
-    distance_km = haversine_function(
+    distance_km = haversine_km(
         float(normalized_origin["y"]),
         float(normalized_origin["x"]),
         float(normalized_destination["y"]),
@@ -1009,7 +1131,6 @@ def _build_route_bundle(
     user_longitude: float,
     osrm_base_url: str | None,
     osrm_profile: str = DEFAULT_OSRM_PROFILE,
-    page2_module=None,
 ) -> tuple[pd.DataFrame, list[dict[str, object]], list[str]]:
     prepared, destinations = _prepare_destinations(recommendations)
     origin = {"x": user_longitude, "y": user_latitude, "key": "origin", "name": "현재 위치"}
@@ -1031,14 +1152,12 @@ def _build_route_bundle(
                 detail = _build_straight_line_route_detail(
                     origin,
                     destination,
-                    page2_module,
                     reason="osrm route lookup failed",
                 )
         else:
             detail = _build_straight_line_route_detail(
                 origin,
                 destination,
-                page2_module,
                 reason="missing osrm base url",
             )
 
@@ -1064,15 +1183,109 @@ def build_request_id(
 
 
 def _apply_browser_location(location_payload: object) -> None:
-    apply_browser_location(location_payload, prefix="realtime")
+    apply_browser_location(location_payload, prefix=STATE_PREFIX)
 
 
 def _mark_manual_location() -> None:
-    mark_manual_location(prefix="realtime")
+    mark_manual_location(prefix=STATE_PREFIX)
 
 
 def _sync_default_coordinates(shelters_frame: pd.DataFrame) -> None:
-    sync_default_coordinates(shelters_frame, prefix="realtime")
+    sync_default_coordinates(shelters_frame, prefix=STATE_PREFIX)
+
+
+def _get_live_crawled_alerts(refresh_requested: bool) -> tuple[pd.DataFrame, str | None]:
+    cache_key = _state_key("live_crawled_alerts")
+    should_reload = refresh_requested or cache_key not in st.session_state
+
+    try:
+        if should_reload:
+            with st.spinner("실시간 재난문자를 확인하는 중..."):
+                alerts = load_prefixed_session_value(
+                    st.session_state,
+                    prefix=STATE_PREFIX,
+                    name="live_crawled_alerts",
+                    loader=load_live_crawled_alerts_dataframe_uncached,
+                    force_refresh=True,
+                )
+        else:
+            alerts = load_prefixed_session_value(
+                st.session_state,
+                prefix=STATE_PREFIX,
+                name="live_crawled_alerts",
+                loader=load_live_crawled_alerts_dataframe_uncached,
+            )
+        return alerts, None
+    except Exception as exc:
+        cached_alerts = st.session_state.get(cache_key)
+        if isinstance(cached_alerts, pd.DataFrame):
+            return cached_alerts, f"실시간 크롤링 재시도에 실패해 직전 결과를 유지한다: {exc}"
+        return build_empty_crawled_alerts_dataframe(), f"실시간 재난문자 크롤링을 실행하지 못했다: {exc}"
+
+
+def _format_alert_option(alert: pd.Series) -> str:
+    timestamp = pd.Timestamp(alert["발표시각"]).strftime("%Y-%m-%d %H:%M")
+    return (
+        f"{timestamp} | {alert['지역']} {alert['시군구']} | "
+        f"{alert['재난종류']} | {alert['특보등급']}"
+    )
+
+
+def _format_selected_disaster_metric(alert_row: pd.Series | None) -> str:
+    if alert_row is None:
+        return "-"
+
+    raw_disaster = str(alert_row["재난종류"])
+    disaster_group = str(alert_row["재난그룹"])
+    if raw_disaster == disaster_group:
+        return raw_disaster
+    return f"{raw_disaster} ({disaster_group})"
+
+
+def resolve_region_alert_state(
+    crawled_alerts: pd.DataFrame,
+    active_sido: str,
+    active_sigungu: str,
+) -> tuple[bool, pd.DataFrame, dict[str, object] | None]:
+    if active_sido not in SUPPORTED_CRAWLED_REGIONS:
+        return False, pd.DataFrame(columns=crawled_alerts.columns), None
+
+    recent_alerts = get_recent_crawled_alerts(crawled_alerts, active_sido, active_sigungu, limit=5)
+    default_alert = select_default_crawled_alert(crawled_alerts, active_sido, active_sigungu)
+    return True, recent_alerts, default_alert
+
+
+def _select_sidebar_alert(recent_alerts: pd.DataFrame, default_alert: dict[str, object] | None) -> pd.Series | None:
+    selected_key_name = _state_key("selected_alert_key")
+    if recent_alerts.empty:
+        st.session_state[selected_key_name] = None
+        st.sidebar.selectbox(
+            "최근 재난문자",
+            options=[EMPTY_OPTION_KEY],
+            index=0,
+            format_func=lambda _: "선택 가능한 재난문자 없음",
+            disabled=True,
+            key=_state_key("empty_alert_select"),
+        )
+        return None
+
+    alert_by_key = {str(row["alert_key"]): row for _, row in recent_alerts.iterrows()}
+    option_keys = list(alert_by_key.keys())
+    default_key = str(default_alert["alert_key"]) if default_alert is not None else option_keys[0]
+    if st.session_state.get(selected_key_name) not in option_keys:
+        st.session_state[selected_key_name] = default_key
+
+    st.sidebar.selectbox(
+        "최근 재난문자",
+        options=option_keys,
+        format_func=lambda key: _format_alert_option(alert_by_key[str(key)]),
+        key=selected_key_name,
+    )
+
+    selected_key = st.session_state.get(selected_key_name)
+    if selected_key not in alert_by_key:
+        return None
+    return alert_by_key[str(selected_key)]
 
 
 def render_page() -> None:
@@ -1083,11 +1296,10 @@ def render_page() -> None:
         initial_sidebar_state="expanded",
     )
 
-    st.title("2. 실시간 테스트")
-    st.write("브라우저 위치를 받아 재난 유형별 대피소 3곳과 OSRM 도보 경로를 나타냅니다.")
+    st.title("3. 재난문자 대피 안내")
+    st.write("최근 재난문자를 기준으로 현재 위치와 맞물린 대피소 3곳과 OSRM 경로를 안내합니다.")
 
     try:
-        alerts_frame = load_alerts_dataframe()
         shelters_frame = load_shelters_dataframe()
         earthquake_shelters_frame = load_earthquake_shelters_dataframe()
         tsunami_shelters_frame = load_tsunami_shelters_dataframe()
@@ -1095,20 +1307,28 @@ def render_page() -> None:
         st.error(str(exc))
         st.stop()
 
-    st.session_state.setdefault("realtime_selected_disaster", None)
-    st.session_state.setdefault("realtime_last_request_id", "")
+    st.session_state.setdefault(_state_key("selected_alert_key"), None)
+    st.session_state.setdefault(_state_key("last_request_id"), "")
     _sync_default_coordinates(shelters_frame)
 
-    st.sidebar.header("실시간 테스트 조건")
+    st.sidebar.header("재난문자 안내 조건")
+    refresh_requested = st.sidebar.button("실시간 재난문자 확인", use_container_width=True)
+    crawled_alerts, crawl_error = _get_live_crawled_alerts(refresh_requested)
+    crawl_updated_at = str(st.session_state.get(_state_key("live_crawled_alerts_updated_at"), "-"))
+    st.sidebar.caption(f"최근 크롤링 확인: {crawl_updated_at}")
+
     st.sidebar.radio(
         "위치 입력 방식",
         options=["auto", "manual"],
         format_func=lambda mode: "자동" if mode == "auto" else "수동",
-        key="realtime_location_mode",
+        key=_state_key("location_mode"),
         horizontal=True,
     )
 
-    if st.session_state["realtime_location_mode"] == "auto":
+    if crawl_error:
+        st.warning(crawl_error)
+
+    if st.session_state[_state_key("location_mode")] == "auto":
         if streamlit_geolocation is None:
             st.sidebar.warning("`streamlit-geolocation` 을 불러오지 못해 자동 위치를 쓸 수 없다. 필요하면 좌표를 직접 입력해 주세요.")
         else:
@@ -1123,7 +1343,7 @@ def render_page() -> None:
         max_value=45.0,
         step=0.0001,
         format="%.6f",
-        key="realtime_lat",
+        key=_state_key("lat"),
         on_change=_mark_manual_location,
     )
     st.sidebar.number_input(
@@ -1132,11 +1352,11 @@ def render_page() -> None:
         max_value=140.0,
         step=0.0001,
         format="%.6f",
-        key="realtime_lon",
+        key=_state_key("lon"),
         on_change=_mark_manual_location,
     )
 
-    coordinates = get_browser_or_manual_coordinates(st.session_state, prefix="realtime")
+    coordinates = get_browser_or_manual_coordinates(st.session_state, prefix=STATE_PREFIX)
     if coordinates is None:
         st.warning("현재 좌표를 읽지 못했다. 수동 좌표를 입력해 주세요.")
         st.stop()
@@ -1149,28 +1369,33 @@ def render_page() -> None:
     )
     active_sido = str(detected_region.get("sido") or "울산")
     active_sigungu = str(detected_region.get("sigungu") or "북구")
-
-    disaster_options = get_disaster_options(alerts_frame, active_sido, active_sigungu)
-    st.sidebar.selectbox(
-        "재난 유형",
-        options=disaster_options,
-        index=None,
-        placeholder="재난 유형 선택",
-        key="realtime_selected_disaster",
+    region_supported, recent_alerts, default_alert = resolve_region_alert_state(
+        crawled_alerts,
+        active_sido,
+        active_sigungu,
     )
-
-    selected_disaster = st.session_state.get("realtime_selected_disaster")
-    recent_alerts = get_recent_alerts(alerts_frame, active_sido, active_sigungu, limit=5)
-    alert_summary = build_alert_summary(alerts_frame, active_sido, active_sigungu)
-
-    if not should_compute_recommendations(selected_disaster):
-        recommendations = pd.DataFrame(columns=RECOMMENDATION_RESULT_COLUMNS)
+    selected_alert: pd.Series | None = None
+    if region_supported:
+        selected_alert = _select_sidebar_alert(recent_alerts, default_alert)
     else:
+        st.session_state[_state_key("selected_alert_key")] = None
+        st.sidebar.selectbox(
+            "최근 재난문자",
+            options=[EMPTY_OPTION_KEY],
+            index=0,
+            format_func=lambda _: "지원 지역 밖",
+            disabled=True,
+            key=_state_key("unsupported_alert_select"),
+        )
+        st.sidebar.caption("이 페이지는 대구·울산·부산·경북·경남 크롤링 데이터 기준으로 동작한다.")
+
+    recommendations = pd.DataFrame(columns=RECOMMENDATION_RESULT_COLUMNS)
+    if selected_alert is not None:
         recommendations = recommend_shelters(
             shelters_frame=shelters_frame,
             earthquake_shelters_frame=earthquake_shelters_frame,
             tsunami_shelters_frame=tsunami_shelters_frame,
-            disaster_group=str(selected_disaster),
+            disaster_group=str(selected_alert["재난그룹"]),
             latitude=float(selected_latitude),
             longitude=float(selected_longitude),
             sido=active_sido,
@@ -1182,20 +1407,19 @@ def render_page() -> None:
     route_details: list[dict[str, object]] = []
     route_warnings: list[str] = []
     map_html = ""
-
-    if not recommendations.empty:
+    if selected_alert is not None and not recommendations.empty:
         request_id = build_request_id(
-            str(selected_disaster),
+            str(selected_alert["alert_key"]),
             coordinates,
             recommendations,
             osrm_base_url,
             osrm_profile,
         )
-        if st.session_state.get("realtime_last_request_id") == request_id:
-            recommendations = st.session_state.get("realtime_cached_recommendations", recommendations)
-            route_details = st.session_state.get("realtime_cached_route_details", [])
-            map_html = str(st.session_state.get("realtime_cached_map_html", ""))
-            route_warnings = st.session_state.get("realtime_cached_route_warnings", [])
+        if st.session_state.get(_state_key("last_request_id")) == request_id:
+            recommendations = st.session_state.get(_state_key("cached_recommendations"), recommendations)
+            route_details = st.session_state.get(_state_key("cached_route_details"), [])
+            map_html = str(st.session_state.get(_state_key("cached_map_html"), ""))
+            route_warnings = st.session_state.get(_state_key("cached_route_warnings"), [])
         else:
             recommendations, route_details, route_warnings = _build_route_bundle(
                 recommendations,
@@ -1203,7 +1427,6 @@ def render_page() -> None:
                 user_longitude=float(selected_longitude),
                 osrm_base_url=osrm_base_url,
                 osrm_profile=osrm_profile,
-                page2_module=globals(),
             )
             map_html = build_realtime_recommendation_map(
                 user_lat=float(selected_latitude),
@@ -1211,46 +1434,60 @@ def render_page() -> None:
                 recommendations=recommendations,
                 route_details=route_details,
             )._repr_html_()
-            st.session_state["realtime_last_request_id"] = request_id
-            st.session_state["realtime_cached_recommendations"] = recommendations
-            st.session_state["realtime_cached_route_details"] = route_details
-            st.session_state["realtime_cached_map_html"] = map_html
-            st.session_state["realtime_cached_route_warnings"] = route_warnings
+            st.session_state[_state_key("last_request_id")] = request_id
+            st.session_state[_state_key("cached_recommendations")] = recommendations
+            st.session_state[_state_key("cached_route_details")] = route_details
+            st.session_state[_state_key("cached_map_html")] = map_html
+            st.session_state[_state_key("cached_route_warnings")] = route_warnings
 
     tsunami_policy = evaluate_tsunami_actionability(
-        str(selected_disaster) if selected_disaster else None,
+        str(selected_alert["재난그룹"]) if selected_alert is not None else None,
         recommendations,
         route_details,
     )
     show_recommendations = not recommendations.empty and bool(tsunami_policy["is_actionable"])
     tsunami_policy_message = str(tsunami_policy.get("message") or "")
 
-    metric_columns = st.columns(4)
-    metric_columns[0].metric("위치 소스", format_location_source_label(st.session_state.get("realtime_location_source")))
+    metric_columns = st.columns(5)
+    metric_columns[0].metric("위치 소스", format_location_source_label(st.session_state.get(_state_key("location_source"))))
     metric_columns[1].metric("감지 지역", f"{active_sido} {active_sigungu}")
-    metric_columns[2].metric("선택 재난", "-" if not selected_disaster else str(selected_disaster))
-    metric_columns[3].metric("추천 대피소 수", f"{len(recommendations):.0f}" if show_recommendations else "-")
+    metric_columns[2].metric("크롤링 문자 수", f"{len(crawled_alerts):.0f}")
+    metric_columns[3].metric("선택 재난", _format_selected_disaster_metric(selected_alert))
+    metric_columns[4].metric("추천 대피소 수", f"{len(recommendations):.0f}" if show_recommendations else "-")
 
     left_column, right_column = st.columns([1.0, 1.15], gap="large")
-
     with left_column:
         with st.container(border=True):
-            st.subheader("현재 테스트 상태")
+            st.subheader("현재 안내 상태")
             st.markdown(f"- 현재 좌표: **{selected_latitude:.6f}, {selected_longitude:.6f}**")
             st.markdown(f"- 감지 지역: **{active_sido} {active_sigungu}**")
+            st.markdown(f"- 최근 크롤링 확인: **{crawl_updated_at}**")
             st.markdown(
-                f"- 최근 알림 시각: **{'-' if alert_summary['latest_time'] is None else pd.Timestamp(alert_summary['latest_time']).strftime('%Y-%m-%d %H:%M')}**"
+                f"- 위치 갱신 시각: **{st.session_state.get(_state_key('location_updated_at'), '-')}**"
             )
-            st.markdown(
-                f"- 위치 갱신 시각: **{st.session_state.get('realtime_location_updated_at', '-')}**"
-            )
-            if recent_alerts.empty:
-                st.caption("현재 감지 지역과 매칭된 알림이 없어도 재난 선택 옵션은 기본 목록을 기준으로 보여준다.")
+            if not region_supported:
+                st.info("이 페이지는 대구·울산·부산·경북·경남 5개 권역 크롤링 데이터 기준으로만 안내한다.")
+            elif crawl_error and crawled_alerts.empty:
+                st.info("실시간 크롤링 결과를 아직 확보하지 못했다.")
+            elif recent_alerts.empty:
+                st.info("현재 감지 지역에 재난문자가 없습니다")
 
-        if selected_disaster and recommendations.empty:
-            st.info("현재 조건으로 추천할 대피소가 없습니다. 재난 문자를 확인해주세요")
-        elif not selected_disaster:
-            st.info("재난 유형을 선택 해주세요")
+        with st.container(border=True):
+            st.subheader("선택 재난문자 상세")
+            if selected_alert is None:
+                st.info("선택된 재난문자가 없습니다")
+            else:
+                st.markdown(f"- 발표시각: **{pd.Timestamp(selected_alert['발표시각']).strftime('%Y-%m-%d %H:%M')}**")
+                st.markdown(f"- 특보등급: **{selected_alert['특보등급'] or '-'}**")
+                st.markdown(f"- 발송기관: **{selected_alert['발송기관'] or '-'}**")
+                st.markdown(f"- 시군구: **{selected_alert['시군구'] or '-'}**")
+                st.markdown(f"- 재난그룹: **{selected_alert['재난그룹']}**")
+                st.markdown(f"- 내용: {selected_alert['내용'] or '-'}")
+
+        if selected_alert is not None and recommendations.empty:
+            st.info("현재 조건으로 추천할 대피소가 없다.")
+        elif selected_alert is None and region_supported and not recent_alerts.empty:
+            st.info("최근 재난문자를 선택하면 대피소 3곳과 경로를 계산한다.")
         elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
             st.warning(tsunami_policy_message)
             st.info(OFFICIAL_GUIDANCE_MESSAGE)
@@ -1260,22 +1497,23 @@ def render_page() -> None:
                 for detail in route_details
                 if detail.get("destination_key")
             }
-            card_columns = st.columns(min(len(recommendations), 3))
-            for index, (_, row) in enumerate(recommendations.iterrows()):
-                detail = detail_by_key.get(str(row.get("route_key", "")), {})
-                with card_columns[index]:
-                    with st.container(border=True):
-                        st.subheader(f"Top {index + 1}. {row['대피소명']}")
-                        st.markdown(f"**구분**: {row['추천구분']}")
-                        st.markdown(f"**실경로 거리**: {format_distance_m(detail.get('route_distance_m'))}")
-                        if not tsunami_policy["is_tsunami"]:
-                            st.markdown(f"**예상 시간**: {format_duration_s(detail.get('route_duration_s'))}")
-                        st.markdown(f"**직선 거리**: {float(row['거리_km']):.2f} km")
-                        st.markdown(f"**주소**: {row['주소']}")
-                        if detail.get("source") == "straight_line":
-                            st.caption("OSRM 도보 경로 대신 직선 fallback 을 표시 중")
-            if tsunami_policy["is_tsunami"]:
-                st.caption(TSUNAMI_ETA_WARNING_MESSAGE)
+            if not recommendations.empty:
+                card_columns = st.columns(min(len(recommendations), 3))
+                for index, (_, row) in enumerate(recommendations.iterrows()):
+                    detail = detail_by_key.get(str(row.get("route_key", "")), {})
+                    with card_columns[index]:
+                        with st.container(border=True):
+                            st.subheader(f"Top {index + 1}. {row['대피소명']}")
+                            st.markdown(f"**구분**: {row['추천구분']}")
+                            st.markdown(f"**실경로 거리**: {format_distance_m(detail.get('route_distance_m'))}")
+                            if not tsunami_policy["is_tsunami"]:
+                                st.markdown(f"**예상 시간**: {format_duration_s(detail.get('route_duration_s'))}")
+                            st.markdown(f"**직선 거리**: {float(row['거리_km']):.2f} km")
+                            st.markdown(f"**주소**: {row['주소']}")
+                            if detail.get("source") == "straight_line":
+                                st.caption("OSRM 도보 경로 대신 직선 fallback 을 표시 중")
+                if tsunami_policy["is_tsunami"]:
+                    st.caption(TSUNAMI_ETA_WARNING_MESSAGE)
 
         if route_warnings:
             for warning in dict.fromkeys(route_warnings):
@@ -1283,11 +1521,13 @@ def render_page() -> None:
 
     with right_column:
         with st.container(border=True):
-            st.subheader("실시간 경로 지도")
-            if not selected_disaster:
-                st.info("재난 유형을 선택해주세요.")
+            st.subheader("재난문자 기반 경로 지도")
+            if not region_supported:
+                st.info("지원 권역 안으로 위치가 들어오면 최근 재난문자와 대피 경로를 안내한다.")
+            elif selected_alert is None:
+                st.info(" ")
             elif recommendations.empty:
-                st.info("추천 결과가 없습니다.")
+                st.info("표시할 추천 결과가 없다.")
             elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
                 st.warning(tsunami_policy_message)
                 st.info(OFFICIAL_GUIDANCE_MESSAGE)
@@ -1302,14 +1542,18 @@ def render_page() -> None:
     bottom_left, bottom_right = st.columns([0.95, 1.05], gap="large")
     with bottom_left:
         with st.container(border=True):
-            st.subheader("최근 알림 이력")
-            if recent_alerts.empty:
-                st.info("현재 감지 지역의 최근 알림 이력이 없다.")
+            st.subheader("최근 재난문자")
+            if not region_supported:
+                st.info("이 위치는 크롤링 지원 권역 밖이다.")
+            elif crawl_error and crawled_alerts.empty:
+                st.info("실시간 크롤링 결과가 없어 최근 재난문자를 표시할 수 없다.")
+            elif recent_alerts.empty:
+                st.info("현재 감지 지역의 최신 재난문자가 없습니다.")
             else:
                 alert_display = recent_alerts.copy()
-                alert_display["발표시간"] = alert_display["발표시간"].dt.strftime("%Y-%m-%d %H:%M")
+                alert_display["발표시각"] = alert_display["발표시각"].dt.strftime("%Y-%m-%d %H:%M")
                 st.dataframe(
-                    alert_display[["발표시간", "지역", "시군구", "재난종류", "특보등급"]],
+                    alert_display[["발표시각", "지역", "시군구", "재난종류", "특보등급", "발송기관"]],
                     use_container_width=True,
                     hide_index=True,
                 )
@@ -1318,7 +1562,7 @@ def render_page() -> None:
         with st.container(border=True):
             st.subheader("추천 결과 표")
             if recommendations.empty:
-                st.info("추천 결과가 없습니다.")
+                st.info(" ")
             elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
                 st.warning(tsunami_policy_message)
                 st.info(OFFICIAL_GUIDANCE_MESSAGE)

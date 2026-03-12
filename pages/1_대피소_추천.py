@@ -1,6 +1,7 @@
 import math
 import os
 from collections.abc import MutableMapping
+from pathlib import Path
 
 import folium
 import pandas as pd
@@ -8,23 +9,241 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from app import APP_ICON, APP_TITLE
-from dashboard_data import (
-    DEFAULT_DISASTER_OPTIONS,
-    _get_desktop_default_data_dir,
-    _get_repo_default_data_dir,
-    _maybe_get_secret_data_dir,
-    classify_disaster_type,
-    load_alerts_dataframe,
-    load_alerts_dataframe_uncached,
-    load_earthquake_shelters_dataframe,
-    load_earthquake_shelters_dataframe_uncached,
-    load_shelters_dataframe,
-    load_shelters_dataframe_uncached,
-    load_tsunami_shelters_dataframe,
-    load_tsunami_shelters_dataframe_uncached,
-    normalize_sigungu_name,
-    resolve_data_dir,
-)
+
+ALERT_COLUMNS = ["발표시간", "지역", "시군구", "재난종류", "특보등급", "해당지역"]
+SHELTER_COLUMNS = ["대피소명", "주소", "대피소유형", "위도", "경도", "시도", "시군구", "지역", "수용인원"]
+EARTHQUAKE_COLUMNS = ["대피소명", "주소", "위도", "경도", "수용인원", "시도", "시군구"]
+TSUNAMI_COLUMNS = ["대피소명", "주소", "위도", "경도", "수용인원", "지역", "시도", "시군구"]
+
+DATASET_FILE_MAP = {
+    "alerts": Path("preprocessing") / "danger_clean.csv",
+    "shelters": Path("preprocessing") / "final_shelter_dataset.csv",
+    "earthquake_shelters": Path("preprocessing") / "earthquake_shelter_clean_2.csv",
+    "tsunami_shelters": Path("preprocessing") / "tsunami_shelter_clean_2.csv",
+}
+
+SPECIAL_SHELTER_TYPE_LABELS = {
+    "earthquake_shelter_clean_2.csv": "지진대피장소",
+    "tsunami_shelter_clean_2.csv": "해일대피장소",
+}
+
+RAW_TO_GROUP = {
+    "지진": "지진",
+    "지진해일": "해일/쓰나미",
+    "쓰나미": "해일/쓰나미",
+    "지진해일/쓰나미": "해일/쓰나미",
+    "호우": "호우/태풍",
+    "태풍": "호우/태풍",
+    "강풍": "강풍/풍랑",
+    "풍랑": "강풍/풍랑",
+    "폭염": "폭염",
+    "한파": "한파",
+    "대설": "대설",
+    "건조": "건조",
+}
+
+DEFAULT_DISASTER_OPTIONS = [
+    "호우/태풍",
+    "강풍/풍랑",
+    "폭염",
+    "한파",
+    "대설",
+    "건조",
+    "지진",
+    "해일/쓰나미",
+]
+
+
+def _maybe_get_secret_data_dir() -> str | None:
+    try:
+        if "preprocessing_data_dir" in st.secrets:
+            return str(st.secrets["preprocessing_data_dir"])
+        if "app" in st.secrets and "preprocessing_data_dir" in st.secrets["app"]:
+            return str(st.secrets["app"]["preprocessing_data_dir"])
+    except Exception:
+        return None
+    return None
+
+
+def _get_repo_default_data_dir() -> Path:
+    return Path(__file__).resolve().parents[1] / "preprocessing_data"
+
+
+def _get_desktop_default_data_dir() -> Path:
+    return Path.home() / "Desktop" / "preprocessing_data"
+
+
+def normalize_sigungu_name(value: str | None) -> str:
+    if value is None or pd.isna(value):
+        return ""
+
+    text = str(value).strip().replace(" ", "")
+    if text.endswith(("시", "군")) and len(text) > 1:
+        return text[:-1]
+    return text
+
+
+def resolve_data_dir(path_override: str | Path | None = None) -> Path:
+    candidates: list[Path] = []
+    if path_override is not None:
+        candidates.append(Path(path_override))
+
+    env_path = os.environ.get("PREPROCESSING_DATA_DIR")
+    if env_path:
+        candidates.append(Path(env_path))
+
+    secret_path = _maybe_get_secret_data_dir()
+    if secret_path:
+        candidates.append(Path(secret_path))
+
+    candidates.append(_get_repo_default_data_dir())
+    candidates.append(_get_desktop_default_data_dir())
+
+    checked_paths: list[Path] = []
+    for candidate in candidates:
+        resolved = candidate.expanduser().resolve()
+        checked_paths.append(resolved)
+        if resolved.exists():
+            return resolved
+
+    searched = "\n".join(f"- {path}" for path in checked_paths)
+    raise FileNotFoundError(
+        "전처리 데이터 폴더를 찾지 못했다.\n"
+        "기본 실행은 저장소 내부 `preprocessing_data` 폴더를 사용한다.\n"
+        "다음 경로를 차례대로 확인했다:\n"
+        f"{searched}\n"
+        "다른 위치를 쓰려면 환경변수 `PREPROCESSING_DATA_DIR` 또는 "
+        "`.streamlit/secrets.toml` 의 `preprocessing_data_dir` 를 지정해 달라."
+    )
+
+
+def _read_csv(path: Path) -> pd.DataFrame:
+    try:
+        return pd.read_csv(path, encoding="utf-8-sig")
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"전처리 데이터 파일이 없다: {path}\n"
+            "저장소 기본 데이터(`preprocessing_data/preprocessing/*.csv`)가 모두 있는지 확인하거나 "
+            "다른 위치를 쓰려면 `PREPROCESSING_DATA_DIR` 또는 `.streamlit/secrets.toml` 의 "
+            "`preprocessing_data_dir` 를 지정해 달라."
+        ) from exc
+
+
+def _validate_columns(dataframe: pd.DataFrame, expected_columns: list[str], label: str) -> None:
+    missing_columns = [column for column in expected_columns if column not in dataframe.columns]
+    if missing_columns:
+        raise ValueError(f"{label} CSV 에 필요한 컬럼이 없다: {missing_columns}")
+
+
+def _prepare_alerts(dataframe: pd.DataFrame) -> pd.DataFrame:
+    _validate_columns(dataframe, ALERT_COLUMNS, "danger_clean.csv")
+
+    alerts = dataframe.copy()
+    alerts["발표시간"] = pd.to_datetime(alerts["발표시간"], errors="coerce")
+    alerts["지역"] = alerts["지역"].astype(str).str.strip()
+    alerts["시군구"] = alerts["시군구"].astype(str).str.strip()
+    alerts["시군구정규화"] = alerts["시군구"].map(normalize_sigungu_name)
+    alerts["재난종류"] = alerts["재난종류"].astype(str).str.strip()
+    alerts["특보등급"] = alerts["특보등급"].fillna("미분류").astype(str).str.strip()
+    return alerts.dropna(subset=["발표시간"]).sort_values("발표시간").reset_index(drop=True)
+
+
+def _prepare_shelters(dataframe: pd.DataFrame) -> pd.DataFrame:
+    _validate_columns(dataframe, SHELTER_COLUMNS, "final_shelter_dataset.csv")
+
+    shelters = dataframe.copy()
+    shelters["위도"] = pd.to_numeric(shelters["위도"], errors="coerce")
+    shelters["경도"] = pd.to_numeric(shelters["경도"], errors="coerce")
+    shelters["수용인원"] = pd.to_numeric(shelters["수용인원"], errors="coerce")
+    shelters["시도"] = shelters["시도"].astype(str).str.strip()
+    shelters["시군구"] = shelters["시군구"].astype(str).str.strip()
+    shelters["시군구정규화"] = shelters["시군구"].map(normalize_sigungu_name)
+    shelters["대피소유형"] = shelters["대피소유형"].fillna("미분류").astype(str).str.strip()
+    shelters["수용인원_정렬값"] = shelters["수용인원"].fillna(0)
+    return shelters.dropna(subset=["위도", "경도"]).reset_index(drop=True)
+
+
+def _prepare_special_shelters(
+    dataframe: pd.DataFrame,
+    expected_columns: list[str],
+    label: str,
+) -> pd.DataFrame:
+    _validate_columns(dataframe, expected_columns, label)
+
+    shelters = dataframe.copy()
+    shelters["위도"] = pd.to_numeric(shelters["위도"], errors="coerce")
+    shelters["경도"] = pd.to_numeric(shelters["경도"], errors="coerce")
+    shelters["수용인원"] = pd.to_numeric(shelters["수용인원"], errors="coerce")
+    shelters["시도"] = shelters["시도"].astype(str).str.strip()
+    shelters["시군구"] = shelters["시군구"].astype(str).str.strip()
+    shelters["시군구정규화"] = shelters["시군구"].map(normalize_sigungu_name)
+
+    if "지역" not in shelters.columns:
+        shelters["지역"] = shelters["시도"] + " " + shelters["시군구"]
+    shelters["지역"] = shelters["지역"].fillna(shelters["시도"] + " " + shelters["시군구"])
+    shelters["대피소유형"] = SPECIAL_SHELTER_TYPE_LABELS[label]
+    shelters["수용인원_정렬값"] = shelters["수용인원"].fillna(0)
+    return shelters.dropna(subset=["위도", "경도"]).reset_index(drop=True)
+
+
+def load_alerts_dataframe_uncached(path_override: str | Path | None = None) -> pd.DataFrame:
+    data_dir = resolve_data_dir(path_override)
+    return _prepare_alerts(_read_csv(data_dir / DATASET_FILE_MAP["alerts"]))
+
+
+@st.cache_data(show_spinner=False)
+def load_alerts_dataframe(path_override: str | None = None) -> pd.DataFrame:
+    return load_alerts_dataframe_uncached(path_override)
+
+
+def load_shelters_dataframe_uncached(path_override: str | Path | None = None) -> pd.DataFrame:
+    data_dir = resolve_data_dir(path_override)
+    return _prepare_shelters(_read_csv(data_dir / DATASET_FILE_MAP["shelters"]))
+
+
+@st.cache_data(show_spinner=False)
+def load_shelters_dataframe(path_override: str | None = None) -> pd.DataFrame:
+    return load_shelters_dataframe_uncached(path_override)
+
+
+def load_earthquake_shelters_dataframe_uncached(
+    path_override: str | Path | None = None,
+) -> pd.DataFrame:
+    data_dir = resolve_data_dir(path_override)
+    return _prepare_special_shelters(
+        _read_csv(data_dir / DATASET_FILE_MAP["earthquake_shelters"]),
+        EARTHQUAKE_COLUMNS,
+        "earthquake_shelter_clean_2.csv",
+    )
+
+
+@st.cache_data(show_spinner=False)
+def load_earthquake_shelters_dataframe(path_override: str | None = None) -> pd.DataFrame:
+    return load_earthquake_shelters_dataframe_uncached(path_override)
+
+
+def load_tsunami_shelters_dataframe_uncached(
+    path_override: str | Path | None = None,
+) -> pd.DataFrame:
+    data_dir = resolve_data_dir(path_override)
+    return _prepare_special_shelters(
+        _read_csv(data_dir / DATASET_FILE_MAP["tsunami_shelters"]),
+        TSUNAMI_COLUMNS,
+        "tsunami_shelter_clean_2.csv",
+    )
+
+
+@st.cache_data(show_spinner=False)
+def load_tsunami_shelters_dataframe(path_override: str | None = None) -> pd.DataFrame:
+    return load_tsunami_shelters_dataframe_uncached(path_override)
+
+
+def classify_disaster_type(disaster_name: str | None) -> str:
+    if disaster_name is None:
+        return "기타"
+
+    text = str(disaster_name).strip()
+    return RAW_TO_GROUP.get(text, text if text in DEFAULT_DISASTER_OPTIONS else "기타")
 
 PAGE_LABEL = "대피소 추천"
 

@@ -15,7 +15,7 @@ def test_docs_exist_with_current_sections() -> None:
     assert TEST_DOC_PATH.exists()
     assert "왜 `dashboard_data.py`가 따로 있는가" in structure_document
     assert "`pages/2_실시간_테스트.py`" in flow_document
-    assert "`pages/4_재난문자_대피_안내.py`" in flow_document
+    assert "`pages/3_재난문자_대피_안내.py`" in flow_document
     assert "`PROJECT_DASHBOARD_IMPORT_ONLY=1`" in test_document
 
 
@@ -34,8 +34,6 @@ def test_app_and_pages_compile_without_writing_bytecode() -> None:
     for path in [
         Path("app.py"),
         Path("dashboard_data.py"),
-        Path("crawler_alerts_data.py"),
-        Path("realtime_support.py"),
         *Path("pages").glob("*.py"),
     ]:
         source = path.read_text(encoding="utf-8")

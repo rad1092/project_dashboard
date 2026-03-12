@@ -6,8 +6,6 @@
 
 - `app.py`는 홈 화면이다.
 - `dashboard_data.py`는 기존 `danger_clean.csv` 기반 공용 데이터 로더다.
-- `crawler_alerts_data.py`는 `preprocessing_code/crawling.py` 결과 CSV 전용 로더다.
-- `realtime_support.py`는 위치 입력, OSRM 경로, folium 지도 생성을 Page 2와 Page 4가 함께 쓰는 공용 helper 모듈이다.
 - 실제 화면은 `pages/` 아래 4개 파일로 나뉜다.
 
 ## 현재 화면 구성
@@ -18,10 +16,10 @@
   - 입력 좌표로 지역을 추정하고, 재난 유형에 맞는 대피소 Top 3를 추천한다.
 - `2. 실시간 테스트`
   - 브라우저 위치와 OSRM 도보 경로를 붙여 추천 흐름을 테스트한다.
-- `3. Data Analysis`
+- `3. 재난문자 대피 안내`
+  - `preprocessing_code/crawling.py`를 즉시 한 번 실행해 최근 재난문자를 현재 위치와 연결하고 대피소와 경로를 안내한다.
+- `4. Data Analysis`
   - 과거 특보 이력과 대피소 분포를 차트로 요약한다.
-- `4. 재난문자 대피 안내`
-  - `preprocessing_code/data/disaster_message_realtime.csv` 기준 최근 재난문자를 현재 위치와 연결해 대피소와 경로를 안내한다.
 
 ## 데이터 폴더 구조와 경로 우선순위
 
@@ -60,7 +58,7 @@ streamlit run app.py
 .\.venv\Scripts\python -m pytest -q
 ```
 
-테스트는 `PROJECT_DASHBOARD_IMPORT_ONLY=1`를 사용해서 페이지가 import될 때 화면을 자동 렌더링하지 않게 막고, helper 함수와 데이터 흐름을 직접 검증한다.
+테스트는 `PROJECT_DASHBOARD_IMPORT_ONLY=1`를 사용해서 페이지가 import될 때 화면을 자동 렌더링하지 않게 막고, 각 페이지 내부 함수와 데이터 흐름을 직접 검증한다.
 
 ## docs 안내
 

@@ -161,7 +161,7 @@ def render_page() -> None:
         initial_sidebar_state="expanded",
     )
 
-    st.title("3. Data Analysis")
+    st.title("4. Data Analysis")
     st.write("현재 앱이 참고하는 과거 재난 특보와 대피소 분포를 분석 관점에서 정리한 페이지입니다.")
     st.caption(
         "추천 페이지가 한 지역의 결과를 보여준다면, 이 페이지는 전체 데이터 흐름과 분포를 읽는 데 초점을 둡니다."

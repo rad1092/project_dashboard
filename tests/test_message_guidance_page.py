@@ -5,11 +5,10 @@ def test_message_guidance_page_module_imports(message_guidance_page_module) -> N
 
 
 def test_message_guidance_region_state_handles_supported_and_unsupported_regions(
-    crawler_alerts_data_module,
     message_guidance_page_module,
     sample_preprocessing_dir,
 ) -> None:
-    crawled_alerts = crawler_alerts_data_module.load_crawled_alerts_dataframe_uncached(sample_preprocessing_dir)
+    crawled_alerts = message_guidance_page_module.load_crawled_alerts_dataframe_uncached(sample_preprocessing_dir)
 
     supported, recent_alerts, default_alert = message_guidance_page_module.resolve_region_alert_state(
         crawled_alerts,
@@ -40,12 +39,12 @@ def test_message_guidance_region_state_handles_supported_and_unsupported_regions
 
 
 def test_message_guidance_selected_alert_can_drive_recommendations(
-    crawler_alerts_data_module,
+    message_guidance_page_module,
     recommendation_page_module,
     sample_preprocessing_dir,
 ) -> None:
-    crawled_alerts = crawler_alerts_data_module.load_crawled_alerts_dataframe_uncached(sample_preprocessing_dir)
-    selected = crawler_alerts_data_module.select_default_crawled_alert(crawled_alerts, "경북", "포항시")
+    crawled_alerts = message_guidance_page_module.load_crawled_alerts_dataframe_uncached(sample_preprocessing_dir)
+    selected = message_guidance_page_module.select_default_crawled_alert(crawled_alerts, "경북", "포항시")
     shelters_frame = recommendation_page_module.load_shelters_dataframe_uncached(sample_preprocessing_dir)
     earthquake_shelters_frame = recommendation_page_module.load_earthquake_shelters_dataframe_uncached(
         sample_preprocessing_dir

@@ -38,11 +38,11 @@ PAGE_META = {
         "summary": "브라우저 위치와 OSRM 도보 경로를 현재 추천 흐름에 붙여 테스트한다.",
     },
     "message_guidance": {
-        "label": "4. 재난문자 대피 안내",
+        "label": "3. 재난문자 대피 안내",
         "summary": "크롤링된 최근 재난문자를 현재 위치와 연결해 대피소와 경로를 안내한다.",
     },
     "analysis": {
-        "label": "3. Data Analysis",
+        "label": "4. Data Analysis",
         "summary": "과거 특보 이력과 대피소 분포를 분석 관점에서 요약한다.",
     },
 }

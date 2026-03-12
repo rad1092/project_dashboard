@@ -40,18 +40,8 @@ def dashboard_data_module():
 
 
 @pytest.fixture(scope="session")
-def crawler_alerts_data_module():
-    return load_project_module("crawler_alerts_data.py", "project_dashboard_crawler_alerts")
-
-
-@pytest.fixture(scope="session")
 def recommendation_page_module():
     return load_project_module("pages/1_대피소_추천.py", "project_dashboard_recommendation")
-
-
-@pytest.fixture(scope="session")
-def realtime_support_module():
-    return load_project_module("realtime_support.py", "project_dashboard_realtime_support")
 
 
 @pytest.fixture(scope="session")
@@ -61,12 +51,12 @@ def realtime_page_module():
 
 @pytest.fixture(scope="session")
 def analysis_page_module():
-    return load_project_module("pages/3_Data_Analysis.py", "project_dashboard_analysis")
+    return load_project_module("pages/4_Data_Analysis.py", "project_dashboard_analysis")
 
 
 @pytest.fixture(scope="session")
 def message_guidance_page_module():
-    return load_project_module("pages/4_재난문자_대피_안내.py", "project_dashboard_message_guidance")
+    return load_project_module("pages/3_재난문자_대피_안내.py", "project_dashboard_message_guidance")
 
 
 @pytest.fixture()
