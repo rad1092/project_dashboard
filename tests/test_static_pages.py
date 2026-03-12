@@ -13,21 +13,28 @@ def test_docs_exist_with_current_sections() -> None:
     assert STRUCTURE_DOC_PATH.exists()
     assert FLOW_DOC_PATH.exists()
     assert TEST_DOC_PATH.exists()
-    assert "왜 `dashboard_data.py`가 따로 있는가" in structure_document
-    assert "`pages/2_실시간_테스트.py`" in flow_document
-    assert "`pages/3_재난문자_대피_안내.py`" in flow_document
+    assert "`app.py`" in structure_document
+    assert "`pages/1_대피_안내_시뮬레이션.py`" in flow_document
+    assert "`pages/2_실시간_대피_안내.py`" in flow_document
+    assert "`pages/3_데이터_분석.py`" in flow_document
+    assert "`pages/4_권역_대피소_지도.py`" in flow_document
     assert "`PROJECT_DASHBOARD_IMPORT_ONLY=1`" in test_document
 
 
-def test_realtime_page_runtime_shape(realtime_page_module) -> None:
-    assert realtime_page_module.PAGE_LABEL == "실시간 테스트"
-    assert hasattr(realtime_page_module, "render_page")
-    assert hasattr(realtime_page_module, "_build_route_bundle")
+def test_simulation_page_runtime_shape(simulation_page_module) -> None:
+    assert simulation_page_module.PAGE_LABEL == "대피 안내 시뮬레이션"
+    assert hasattr(simulation_page_module, "render_page")
+    assert hasattr(simulation_page_module, "_build_route_bundle")
 
 
-def test_message_guidance_page_runtime_shape(message_guidance_page_module) -> None:
-    assert message_guidance_page_module.PAGE_LABEL == "재난문자 대피 안내"
-    assert hasattr(message_guidance_page_module, "render_page")
+def test_live_guidance_page_runtime_shape(live_guidance_page_module) -> None:
+    assert live_guidance_page_module.PAGE_LABEL == "실시간 대피 안내"
+    assert hasattr(live_guidance_page_module, "render_page")
+
+
+def test_analysis_page_runtime_shape(analysis_page_module) -> None:
+    assert analysis_page_module.PAGE_LABEL == "데이터 분석"
+    assert hasattr(analysis_page_module, "render_page")
 
 
 def test_app_and_pages_compile_without_writing_bytecode() -> None:

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from html import escape
 import math
 import os
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Mapping, MutableMapping, Sequence
 from datetime import datetime
 from pathlib import Path
+from textwrap import dedent
 from typing import Any
 
 import folium
@@ -13,7 +15,7 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
-from app import APP_ICON, APP_TITLE
+from app import APP_ICON, APP_TITLE, configure_page, render_page_title, render_section_header
 
 try:
     from streamlit_geolocation import streamlit_geolocation
@@ -63,7 +65,7 @@ DEFAULT_DISASTER_OPTIONS = [
     "해일/쓰나미",
 ]
 
-PAGE_LABEL = "실시간 테스트"
+PAGE_LABEL = "대피 안내 시뮬레이션"
 OSRM_BASE_URL_KEY = "OSRM_BASE_URL"
 DEFAULT_OSRM_BASE_URL = "http://router.project-osrm.org"
 DEFAULT_OSRM_PROFILE = "foot"
@@ -74,6 +76,10 @@ OFFICIAL_GUIDANCE_MESSAGE = (
 )
 TSUNAMI_ETA_WARNING_MESSAGE = "예상 시간은 보행 기준 추정치이며 실제 대피 상황과 다를 수 있습니다."
 RANK_COLORS = ["#0f766e", "#1d4ed8", "#f59e0b"]
+CARD_TEXT_PRIMARY = "#e5eef9"
+CARD_TEXT_MUTED = "#94a3b8"
+CARD_DIVIDER = "rgba(148, 163, 184, 0.16)"
+CARD_ROW_BACKGROUND = "rgba(148, 163, 184, 0.04)"
 
 RECOMMENDATION_RESULT_COLUMNS = [
     "대피소명",
@@ -89,6 +95,105 @@ RECOMMENDATION_RESULT_COLUMNS = [
     "추천구분",
     "추천사유",
 ]
+
+SHELTER_NAME_COLUMN = RECOMMENDATION_RESULT_COLUMNS[0]
+SHELTER_ADDRESS_COLUMN = RECOMMENDATION_RESULT_COLUMNS[1]
+SHELTER_TYPE_COLUMN = RECOMMENDATION_RESULT_COLUMNS[2]
+STRAIGHT_DISTANCE_COLUMN = RECOMMENDATION_RESULT_COLUMNS[9]
+RECOMMENDATION_KIND_COLUMN = RECOMMENDATION_RESULT_COLUMNS[10]
+ALERT_DISPLAY_COLUMNS = ALERT_COLUMNS[:5]
+
+
+def _escape_card_text(value: str) -> str:
+    return escape(value).replace("\n", "<br>")
+
+
+def build_shelter_summary_card_html(
+    title: str,
+    rows: Sequence[tuple[str, str]],
+    note: str | None = None,
+) -> str:
+    row_blocks: list[str] = []
+
+    for index, (label, value) in enumerate(rows):
+        border_style = "none" if index == 0 else f"1px solid {CARD_DIVIDER}"
+        row_blocks.append(
+            dedent(
+                f"""\
+<div class="pd-shelter-summary-card__row" style="
+    display: grid;
+    grid-template-columns: minmax(5.75rem, 6.75rem) minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: start;
+    padding: 0.58rem 0.15rem;
+    border-top: {border_style};
+    line-height: 1.28;
+">
+    <div class="pd-shelter-summary-card__label" style="
+        color: {CARD_TEXT_MUTED};
+        font-size: 0.94rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+    ">{_escape_card_text(label)}</div>
+    <div class="pd-shelter-summary-card__value" style="
+        color: {CARD_TEXT_PRIMARY};
+        font-size: 1rem;
+        font-weight: 500;
+        line-height: 1.28;
+        padding: 0.02rem 0.65rem 0.02rem 0.02rem;
+        border-radius: 0.6rem;
+        background: {CARD_ROW_BACKGROUND};
+        overflow-wrap: anywhere;
+        word-break: keep-all;
+    ">{_escape_card_text(value)}</div>
+</div>"""
+            ).strip()
+        )
+
+    note_block = ""
+    if note:
+        note_block = dedent(
+            f"""\
+<div class="pd-shelter-summary-card__note" style="
+    margin-top: 0.45rem;
+    padding-top: 0.7rem;
+    border-top: 1px solid {CARD_DIVIDER};
+    color: {CARD_TEXT_MUTED};
+    font-size: 0.84rem;
+    line-height: 1.25;
+">{_escape_card_text(note)}</div>"""
+        ).strip()
+
+    parts = [
+        f'<div class="pd-shelter-summary-card" style="color: {CARD_TEXT_PRIMARY};">',
+        dedent(
+            f"""\
+<div class="pd-shelter-summary-card__title" style="
+    margin: 0 0 0.75rem 0;
+    color: {CARD_TEXT_PRIMARY};
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+">{_escape_card_text(title)}</div>"""
+        ).strip(),
+        '<div class="pd-shelter-summary-card__rows" style="display: flex; flex-direction: column;">',
+        "\n".join(row_blocks),
+        "</div>",
+    ]
+    if note_block:
+        parts.append(note_block)
+    parts.append("</div>")
+    return "\n".join(parts)
+
+
+def render_shelter_summary_card(
+    title: str,
+    rows: Sequence[tuple[str, str]],
+    note: str | None = None,
+) -> None:
+    st.markdown(build_shelter_summary_card_html(title=title, rows=rows, note=note), unsafe_allow_html=True)
 
 
 def _maybe_get_secret_data_dir() -> str | None:
@@ -1075,16 +1180,122 @@ def _sync_default_coordinates(shelters_frame: pd.DataFrame) -> None:
     sync_default_coordinates(shelters_frame, prefix="realtime")
 
 
+def _render_showcase_top3_cards(
+    recommendations: pd.DataFrame,
+    route_details: list[dict[str, object]],
+    *,
+    is_tsunami: bool,
+) -> None:
+    detail_by_key = {
+        str(detail.get("destination_key", "")): detail
+        for detail in route_details
+        if detail.get("destination_key")
+    }
+    for _, row in recommendations.iterrows():
+        detail = detail_by_key.get(str(row.get("route_key", "")), {})
+        eta_label = "참고용" if is_tsunami else format_duration_s(detail.get("route_duration_s"))
+        rows = [
+            ("구분", str(row[RECOMMENDATION_KIND_COLUMN])),
+            ("실경로 거리", format_distance_m(detail.get("route_distance_m"))),
+            ("예상 시간", eta_label),
+            ("직선 거리", f"{float(row[STRAIGHT_DISTANCE_COLUMN]):.2f} km"),
+            ("주소", str(row[SHELTER_ADDRESS_COLUMN])),
+        ]
+        note = (
+            "OSRM 경로 확인이 안 돼 직선 fallback 결과를 표시 중입니다."
+            if detail.get("source") == "straight_line"
+            else None
+        )
+        with st.container(border=True):
+            render_shelter_summary_card(str(row[SHELTER_NAME_COLUMN]), rows, note=note)
+
+
+def _render_showcase_detail_expander(
+    recent_alerts: pd.DataFrame,
+    recommendations: pd.DataFrame,
+    route_details: list[dict[str, object]],
+    *,
+    tsunami_policy: dict[str, object],
+    tsunami_policy_message: str,
+) -> None:
+    with st.expander("상세 데이터", expanded=False):
+        detail_left, detail_right = st.columns([0.95, 1.05], gap="large")
+
+        with detail_left:
+            with st.container(border=True):
+                render_section_header("최근 알림", "현재 감지 지역 기준 최근 5건입니다.")
+                if recent_alerts.empty:
+                    st.info("현재 감지 지역의 최근 알림 이력이 없습니다.")
+                else:
+                    alert_display = recent_alerts.copy()
+                    alert_display[ALERT_COLUMNS[0]] = alert_display[ALERT_COLUMNS[0]].dt.strftime(
+                        "%Y-%m-%d %H:%M"
+                    )
+                    st.dataframe(
+                        alert_display[ALERT_DISPLAY_COLUMNS],
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+        with detail_right:
+            with st.container(border=True):
+                render_section_header("추천 결과 표")
+                if recommendations.empty:
+                    st.info("추천 결과가 없습니다.")
+                elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
+                    st.warning(tsunami_policy_message)
+                    st.info(OFFICIAL_GUIDANCE_MESSAGE)
+                else:
+                    detail_by_key = {
+                        str(detail.get("destination_key", "")): detail
+                        for detail in route_details
+                        if detail.get("destination_key")
+                    }
+                    display_frame = recommendations.copy()
+                    display_frame["실경로 거리"] = display_frame["route_key"].map(
+                        lambda key: format_distance_m(
+                            detail_by_key.get(str(key), {}).get("route_distance_m")
+                        )
+                    )
+                    display_frame["직선 거리"] = display_frame[STRAIGHT_DISTANCE_COLUMN].map(
+                        lambda value: f"{float(value):.2f} km"
+                    )
+                    columns = [
+                        SHELTER_NAME_COLUMN,
+                        RECOMMENDATION_KIND_COLUMN,
+                        SHELTER_TYPE_COLUMN,
+                        "실경로 거리",
+                        "직선 거리",
+                        SHELTER_ADDRESS_COLUMN,
+                    ]
+                    if not tsunami_policy["is_tsunami"]:
+                        display_frame["예상 시간"] = display_frame["route_key"].map(
+                            lambda key: format_duration_s(
+                                detail_by_key.get(str(key), {}).get("route_duration_s")
+                            )
+                        )
+                        columns = [
+                            SHELTER_NAME_COLUMN,
+                            RECOMMENDATION_KIND_COLUMN,
+                            SHELTER_TYPE_COLUMN,
+                            "실경로 거리",
+                            "예상 시간",
+                            "직선 거리",
+                            SHELTER_ADDRESS_COLUMN,
+                        ]
+                    st.dataframe(display_frame[columns], use_container_width=True, hide_index=True)
+                    if tsunami_policy["is_tsunami"]:
+                        st.info(TSUNAMI_ETA_WARNING_MESSAGE)
+
+
 def render_page() -> None:
-    st.set_page_config(
+    configure_page(
         page_title=f"{APP_TITLE} | {PAGE_LABEL}",
         page_icon=APP_ICON,
-        layout="wide",
-        initial_sidebar_state="expanded",
+        set_page_config=False,
     )
 
-    st.title("2. 실시간 테스트")
-    st.write("브라우저 위치를 받아 재난 유형별 대피소 3곳과 OSRM 도보 경로를 나타냅니다.")
+    render_page_title(PAGE_LABEL)
 
     try:
         alerts_frame = load_alerts_dataframe()
@@ -1099,7 +1310,7 @@ def render_page() -> None:
     st.session_state.setdefault("realtime_last_request_id", "")
     _sync_default_coordinates(shelters_frame)
 
-    st.sidebar.header("실시간 테스트 조건")
+    st.sidebar.header("안내 설정")
     st.sidebar.radio(
         "위치 입력 방식",
         options=["auto", "manual"],
@@ -1110,12 +1321,14 @@ def render_page() -> None:
 
     if st.session_state["realtime_location_mode"] == "auto":
         if streamlit_geolocation is None:
-            st.sidebar.warning("`streamlit-geolocation` 을 불러오지 못해 자동 위치를 쓸 수 없다. 필요하면 좌표를 직접 입력해 주세요.")
+            st.sidebar.warning(
+                "`streamlit-geolocation` 를 불러오지 못해 자동 위치를 받을 수 없습니다. 필요하면 좌표를 직접 입력해 주세요."
+            )
         else:
-            st.sidebar.caption("브라우저 위치 권한을 허용하면 현재 좌표가 아래 입력칸으로 자동 채워진다.")
+            st.sidebar.caption("브라우저 위치 권한을 허용하면 현재 좌표가 자동으로 반영됩니다.")
             _apply_browser_location(streamlit_geolocation())
     else:
-        st.sidebar.caption("수동 모드에서는 아래 위경도 입력값을 유지한다.")
+        st.sidebar.caption("수동 모드에서는 아래 입력한 좌표를 우선합니다.")
 
     st.sidebar.number_input(
         "위도",
@@ -1138,7 +1351,7 @@ def render_page() -> None:
 
     coordinates = get_browser_or_manual_coordinates(st.session_state, prefix="realtime")
     if coordinates is None:
-        st.warning("현재 좌표를 읽지 못했다. 수동 좌표를 입력해 주세요.")
+        st.warning("현재 좌표를 읽지 못했습니다. 수동 좌표를 입력해 주세요.")
         st.stop()
 
     selected_latitude, selected_longitude = coordinates
@@ -1161,7 +1374,6 @@ def render_page() -> None:
 
     selected_disaster = st.session_state.get("realtime_selected_disaster")
     recent_alerts = get_recent_alerts(alerts_frame, active_sido, active_sigungu, limit=5)
-    alert_summary = build_alert_summary(alerts_frame, active_sido, active_sigungu)
 
     if not should_compute_recommendations(selected_disaster):
         recommendations = pd.DataFrame(columns=RECOMMENDATION_RESULT_COLUMNS)
@@ -1225,67 +1437,25 @@ def render_page() -> None:
     show_recommendations = not recommendations.empty and bool(tsunami_policy["is_actionable"])
     tsunami_policy_message = str(tsunami_policy.get("message") or "")
 
-    metric_columns = st.columns(4)
-    metric_columns[0].metric("위치 소스", format_location_source_label(st.session_state.get("realtime_location_source")))
+    metric_columns = st.columns(5, gap="medium")
+    metric_columns[0].metric(
+        "위치 소스",
+        format_location_source_label(st.session_state.get("realtime_location_source")),
+    )
     metric_columns[1].metric("감지 지역", f"{active_sido} {active_sigungu}")
-    metric_columns[2].metric("선택 재난", "-" if not selected_disaster else str(selected_disaster))
-    metric_columns[3].metric("추천 대피소 수", f"{len(recommendations):.0f}" if show_recommendations else "-")
+    metric_columns[2].metric("최근 알림", f"{len(recent_alerts):.0f}")
+    metric_columns[3].metric("선택 재난", "-" if not selected_disaster else str(selected_disaster))
+    metric_columns[4].metric(
+        "대피소",
+        f"{len(recommendations):.0f}" if show_recommendations else "-",
+    )
 
-    left_column, right_column = st.columns([1.0, 1.15], gap="large")
-
-    with left_column:
+    map_column, top3_column = st.columns([1.55, 0.95], gap="large")
+    with map_column:
         with st.container(border=True):
-            st.subheader("현재 테스트 상태")
-            st.markdown(f"- 현재 좌표: **{selected_latitude:.6f}, {selected_longitude:.6f}**")
-            st.markdown(f"- 감지 지역: **{active_sido} {active_sigungu}**")
-            st.markdown(
-                f"- 최근 알림 시각: **{'-' if alert_summary['latest_time'] is None else pd.Timestamp(alert_summary['latest_time']).strftime('%Y-%m-%d %H:%M')}**"
-            )
-            st.markdown(
-                f"- 위치 갱신 시각: **{st.session_state.get('realtime_location_updated_at', '-')}**"
-            )
-            if recent_alerts.empty:
-                st.caption("현재 감지 지역과 매칭된 알림이 없어도 재난 선택 옵션은 기본 목록을 기준으로 보여준다.")
-
-        if selected_disaster and recommendations.empty:
-            st.info("현재 조건으로 추천할 대피소가 없습니다. 재난 문자를 확인해주세요")
-        elif not selected_disaster:
-            st.info("재난 유형을 선택 해주세요")
-        elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
-            st.warning(tsunami_policy_message)
-            st.info(OFFICIAL_GUIDANCE_MESSAGE)
-        else:
-            detail_by_key = {
-                str(detail.get("destination_key", "")): detail
-                for detail in route_details
-                if detail.get("destination_key")
-            }
-            card_columns = st.columns(min(len(recommendations), 3))
-            for index, (_, row) in enumerate(recommendations.iterrows()):
-                detail = detail_by_key.get(str(row.get("route_key", "")), {})
-                with card_columns[index]:
-                    with st.container(border=True):
-                        st.subheader(f"Top {index + 1}. {row['대피소명']}")
-                        st.markdown(f"**구분**: {row['추천구분']}")
-                        st.markdown(f"**실경로 거리**: {format_distance_m(detail.get('route_distance_m'))}")
-                        if not tsunami_policy["is_tsunami"]:
-                            st.markdown(f"**예상 시간**: {format_duration_s(detail.get('route_duration_s'))}")
-                        st.markdown(f"**직선 거리**: {float(row['거리_km']):.2f} km")
-                        st.markdown(f"**주소**: {row['주소']}")
-                        if detail.get("source") == "straight_line":
-                            st.caption("OSRM 도보 경로 대신 직선 fallback 을 표시 중")
-            if tsunami_policy["is_tsunami"]:
-                st.caption(TSUNAMI_ETA_WARNING_MESSAGE)
-
-        if route_warnings:
-            for warning in dict.fromkeys(route_warnings):
-                st.warning(warning)
-
-    with right_column:
-        with st.container(border=True):
-            st.subheader("실시간 경로 지도")
+            render_section_header("지도", "현재 위치와 대피소 경로를 확인합니다.")
             if not selected_disaster:
-                st.info("재난 유형을 선택해주세요.")
+                st.info("재난 유형을 선택해 주세요.")
             elif recommendations.empty:
                 st.info("추천 결과가 없습니다.")
             elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
@@ -1293,55 +1463,37 @@ def render_page() -> None:
                 st.info(OFFICIAL_GUIDANCE_MESSAGE)
             else:
                 components.html(map_html, height=560)
-                st.caption("내 위치 1개, 대피소 3개, 각 경로 3개만 표시한다.")
-                if tsunami_policy["is_tsunami"]:
-                    st.caption(TSUNAMI_ETA_WARNING_MESSAGE)
 
-    st.divider()
-
-    bottom_left, bottom_right = st.columns([0.95, 1.05], gap="large")
-    with bottom_left:
+    with top3_column:
         with st.container(border=True):
-            st.subheader("최근 알림 이력")
-            if recent_alerts.empty:
-                st.info("현재 감지 지역의 최근 알림 이력이 없다.")
-            else:
-                alert_display = recent_alerts.copy()
-                alert_display["발표시간"] = alert_display["발표시간"].dt.strftime("%Y-%m-%d %H:%M")
-                st.dataframe(
-                    alert_display[["발표시간", "지역", "시군구", "재난종류", "특보등급"]],
-                    use_container_width=True,
-                    hide_index=True,
-                )
-
-    with bottom_right:
-        with st.container(border=True):
-            st.subheader("추천 결과 표")
-            if recommendations.empty:
-                st.info("추천 결과가 없습니다.")
+            render_section_header("대피소 안내")
+            if not selected_disaster:
+                st.info("재난 유형을 선택해주세요")
+            elif recommendations.empty:
+                st.info("현재 조건으로 추천할 대피소가 없습니다.")
             elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
                 st.warning(tsunami_policy_message)
                 st.info(OFFICIAL_GUIDANCE_MESSAGE)
             else:
-                detail_by_key = {
-                    str(detail.get("destination_key", "")): detail
-                    for detail in route_details
-                    if detail.get("destination_key")
-                }
-                display_frame = recommendations.copy()
-                display_frame["실경로 거리"] = display_frame["route_key"].map(
-                    lambda key: format_distance_m(detail_by_key.get(str(key), {}).get("route_distance_m"))
+                _render_showcase_top3_cards(
+                    recommendations,
+                    route_details,
+                    is_tsunami=bool(tsunami_policy["is_tsunami"]),
                 )
-                display_frame["직선 거리"] = display_frame["거리_km"].map(lambda value: f"{float(value):.2f} km")
-                columns = ["대피소명", "추천구분", "대피소유형", "실경로 거리", "직선 거리", "주소"]
-                if not tsunami_policy["is_tsunami"]:
-                    display_frame["예상 시간"] = display_frame["route_key"].map(
-                        lambda key: format_duration_s(detail_by_key.get(str(key), {}).get("route_duration_s"))
-                    )
-                    columns = ["대피소명", "추천구분", "대피소유형", "실경로 거리", "예상 시간", "직선 거리", "주소"]
-                st.dataframe(display_frame[columns], use_container_width=True, hide_index=True)
                 if tsunami_policy["is_tsunami"]:
-                    st.caption(TSUNAMI_ETA_WARNING_MESSAGE)
+                    st.info(TSUNAMI_ETA_WARNING_MESSAGE)
+
+    if route_warnings:
+        for warning in dict.fromkeys(route_warnings):
+            st.warning(warning)
+
+    _render_showcase_detail_expander(
+        recent_alerts,
+        recommendations,
+        route_details,
+        tsunami_policy=tsunami_policy,
+        tsunami_policy_message=tsunami_policy_message,
+    )
 
 
 if os.environ.get("PROJECT_DASHBOARD_IMPORT_ONLY") != "1":
