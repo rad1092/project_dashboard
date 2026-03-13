@@ -5,6 +5,16 @@ backgroundColor = "#0b1220"
 secondaryBackgroundColor = "#111827"
 textColor = "#e5eef9"
 font = "sans serif"
+showSidebarBorder = true
+
+[theme.sidebar]
+primaryColor = "#f97316"
+backgroundColor = "#08111c"
+secondaryBackgroundColor = "#1e293b"
+textColor = "#f8fafc"
+borderColor = "#334155"
+buttonRadius = "large"
+showWidgetBorder = true
 
 [browser]
 gatherUsageStats = false

@@ -80,6 +80,9 @@ CARD_TEXT_PRIMARY = "#e5eef9"
 CARD_TEXT_MUTED = "#94a3b8"
 CARD_DIVIDER = "rgba(148, 163, 184, 0.16)"
 CARD_ROW_BACKGROUND = "rgba(148, 163, 184, 0.04)"
+SHOWCASE_CARD_SCALE = 0.8
+SHOWCASE_PANEL_HEIGHT_PX = 710
+SHOWCASE_MAP_HEIGHT_PX = 610
 
 RECOMMENDATION_RESULT_COLUMNS = [
     "대피소명",
@@ -108,6 +111,10 @@ def _escape_card_text(value: str) -> str:
     return escape(value).replace("\n", "<br>")
 
 
+def _scaled_rem(value: float) -> str:
+    return f"{value * SHOWCASE_CARD_SCALE:.2f}rem"
+
+
 def build_shelter_summary_card_html(
     title: str,
     rows: Sequence[tuple[str, str]],
@@ -122,27 +129,27 @@ def build_shelter_summary_card_html(
                 f"""\
 <div class="pd-shelter-summary-card__row" style="
     display: grid;
-    grid-template-columns: minmax(5.75rem, 6.75rem) minmax(0, 1fr);
-    gap: 0.75rem;
+    grid-template-columns: minmax({_scaled_rem(5.75)}, {_scaled_rem(6.75)}) minmax(0, 1fr);
+    gap: {_scaled_rem(0.75)};
     align-items: start;
-    padding: 0.58rem 0.15rem;
+    padding: {_scaled_rem(0.58)} {_scaled_rem(0.15)};
     border-top: {border_style};
     line-height: 1.28;
 ">
     <div class="pd-shelter-summary-card__label" style="
         color: {CARD_TEXT_MUTED};
-        font-size: 0.94rem;
+        font-size: {_scaled_rem(0.94)};
         font-weight: 600;
         letter-spacing: -0.01em;
         white-space: nowrap;
     ">{_escape_card_text(label)}</div>
     <div class="pd-shelter-summary-card__value" style="
         color: {CARD_TEXT_PRIMARY};
-        font-size: 1rem;
+        font-size: {_scaled_rem(1.0)};
         font-weight: 500;
         line-height: 1.28;
-        padding: 0.02rem 0.65rem 0.02rem 0.02rem;
-        border-radius: 0.6rem;
+        padding: {_scaled_rem(0.02)} {_scaled_rem(0.65)} {_scaled_rem(0.02)} {_scaled_rem(0.02)};
+        border-radius: {_scaled_rem(0.6)};
         background: {CARD_ROW_BACKGROUND};
         overflow-wrap: anywhere;
         word-break: keep-all;
@@ -156,11 +163,11 @@ def build_shelter_summary_card_html(
         note_block = dedent(
             f"""\
 <div class="pd-shelter-summary-card__note" style="
-    margin-top: 0.45rem;
-    padding-top: 0.7rem;
+    margin-top: {_scaled_rem(0.45)};
+    padding-top: {_scaled_rem(0.7)};
     border-top: 1px solid {CARD_DIVIDER};
     color: {CARD_TEXT_MUTED};
-    font-size: 0.84rem;
+    font-size: {_scaled_rem(0.84)};
     line-height: 1.25;
 ">{_escape_card_text(note)}</div>"""
         ).strip()
@@ -170,9 +177,9 @@ def build_shelter_summary_card_html(
         dedent(
             f"""\
 <div class="pd-shelter-summary-card__title" style="
-    margin: 0 0 0.75rem 0;
+    margin: 0 0 {_scaled_rem(0.75)} 0;
     color: {CARD_TEXT_PRIMARY};
-    font-size: 1.9rem;
+    font-size: {_scaled_rem(1.9)};
     font-weight: 700;
     line-height: 1.1;
     letter-spacing: -0.02em;
@@ -1311,13 +1318,40 @@ def render_page() -> None:
     _sync_default_coordinates(shelters_frame)
 
     st.sidebar.header("안내 설정")
+    browser_location_payload: object | None = None
+    st.sidebar.markdown("위치 입력 방식")
     st.sidebar.radio(
         "위치 입력 방식",
         options=["auto", "manual"],
         format_func=lambda mode: "자동" if mode == "auto" else "수동",
         key="realtime_location_mode",
         horizontal=True,
+        label_visibility="collapsed",
     )
+
+    metric_placeholder = st.empty()
+    map_body_placeholder = None
+    top3_body_placeholder = None
+    with st.container():
+        map_column, top3_column = st.columns([1.45, 1.05], gap="medium")
+        with map_column:
+            with st.container(border=True, height=SHOWCASE_PANEL_HEIGHT_PX):
+                map_header_column, map_action_column = st.columns(
+                    [0.93, 0.07],
+                    gap="small",
+                    vertical_alignment="center",
+                )
+                with map_header_column:
+                    st.subheader("지도")
+                with map_action_column:
+                    if streamlit_geolocation is not None:
+                        browser_location_payload = streamlit_geolocation()
+                st.caption("현재 위치와 대피소 경로를 확인합니다.")
+                map_body_placeholder = st.empty()
+
+        with top3_column:
+            with st.container(border=True, height=SHOWCASE_PANEL_HEIGHT_PX):
+                top3_body_placeholder = st.empty()
 
     if st.session_state["realtime_location_mode"] == "auto":
         if streamlit_geolocation is None:
@@ -1326,7 +1360,7 @@ def render_page() -> None:
             )
         else:
             st.sidebar.caption("브라우저 위치 권한을 허용하면 현재 좌표가 자동으로 반영됩니다.")
-            _apply_browser_location(streamlit_geolocation())
+            _apply_browser_location(browser_location_payload)
     else:
         st.sidebar.caption("수동 모드에서는 아래 입력한 좌표를 우선합니다.")
 
@@ -1437,51 +1471,47 @@ def render_page() -> None:
     show_recommendations = not recommendations.empty and bool(tsunami_policy["is_actionable"])
     tsunami_policy_message = str(tsunami_policy.get("message") or "")
 
-    metric_columns = st.columns(5, gap="medium")
-    metric_columns[0].metric(
-        "위치 소스",
-        format_location_source_label(st.session_state.get("realtime_location_source")),
-    )
-    metric_columns[1].metric("감지 지역", f"{active_sido} {active_sigungu}")
-    metric_columns[2].metric("최근 알림", f"{len(recent_alerts):.0f}")
-    metric_columns[3].metric("선택 재난", "-" if not selected_disaster else str(selected_disaster))
-    metric_columns[4].metric(
-        "대피소",
-        f"{len(recommendations):.0f}" if show_recommendations else "-",
-    )
+    with metric_placeholder.container():
+        metric_columns = st.columns(5, gap="medium")
+        metric_columns[0].metric(
+            "위치 소스",
+            format_location_source_label(st.session_state.get("realtime_location_source")),
+        )
+        metric_columns[1].metric("감지 지역", f"{active_sido} {active_sigungu}")
+        metric_columns[2].metric("최근 알림", f"{len(recent_alerts):.0f}")
+        metric_columns[3].metric("선택 재난", "-" if not selected_disaster else str(selected_disaster))
+        metric_columns[4].metric(
+            "대피소",
+            f"{len(recommendations):.0f}" if show_recommendations else "-",
+        )
 
-    map_column, top3_column = st.columns([1.55, 0.95], gap="large")
-    with map_column:
-        with st.container(border=True):
-            render_section_header("지도", "현재 위치와 대피소 경로를 확인합니다.")
-            if not selected_disaster:
-                st.info("재난 유형을 선택해 주세요.")
-            elif recommendations.empty:
-                st.info("추천 결과가 없습니다.")
-            elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
-                st.warning(tsunami_policy_message)
-                st.info(OFFICIAL_GUIDANCE_MESSAGE)
-            else:
-                components.html(map_html, height=560)
+    with map_body_placeholder.container():
+        if not selected_disaster:
+            st.info("재난 유형을 선택해 주세요.")
+        elif recommendations.empty:
+            st.info("추천 결과가 없습니다.")
+        elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
+            st.warning(tsunami_policy_message)
+            st.info(OFFICIAL_GUIDANCE_MESSAGE)
+        else:
+            components.html(map_html, height=SHOWCASE_MAP_HEIGHT_PX)
 
-    with top3_column:
-        with st.container(border=True):
-            render_section_header("대피소 안내")
-            if not selected_disaster:
-                st.info("재난 유형을 선택해주세요")
-            elif recommendations.empty:
-                st.info("현재 조건으로 추천할 대피소가 없습니다.")
-            elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
-                st.warning(tsunami_policy_message)
-                st.info(OFFICIAL_GUIDANCE_MESSAGE)
-            else:
-                _render_showcase_top3_cards(
-                    recommendations,
-                    route_details,
-                    is_tsunami=bool(tsunami_policy["is_tsunami"]),
-                )
-                if tsunami_policy["is_tsunami"]:
-                    st.info(TSUNAMI_ETA_WARNING_MESSAGE)
+    with top3_body_placeholder.container():
+        if not selected_disaster:
+            st.info("재난 유형을 선택해주세요")
+        elif recommendations.empty:
+            st.info("현재 조건으로 추천할 대피소가 없습니다.")
+        elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
+            st.warning(tsunami_policy_message)
+            st.info(OFFICIAL_GUIDANCE_MESSAGE)
+        else:
+            _render_showcase_top3_cards(
+                recommendations,
+                route_details,
+                is_tsunami=bool(tsunami_policy["is_tsunami"]),
+            )
+            if tsunami_policy["is_tsunami"]:
+                st.info(TSUNAMI_ETA_WARNING_MESSAGE)
 
     if route_warnings:
         for warning in dict.fromkeys(route_warnings):

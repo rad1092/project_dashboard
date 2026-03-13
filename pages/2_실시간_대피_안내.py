@@ -81,6 +81,8 @@ CARD_TEXT_PRIMARY = "#e5eef9"
 CARD_TEXT_MUTED = "#94a3b8"
 CARD_DIVIDER = "rgba(148, 163, 184, 0.16)"
 CARD_ROW_BACKGROUND = "rgba(148, 163, 184, 0.04)"
+SHOWCASE_PANEL_HEIGHT_PX = 710
+SHOWCASE_MAP_HEIGHT_PX = 610
 CRAWLING_MODULE_NAME = "project_dashboard_live_crawling_runtime"
 CRAWLING_MODULE_PATH = Path(__file__).resolve().parents[1] / "preprocessing_code" / "crawling.py"
 DEFAULT_CRAWLING_WAIT_SECONDS = 15
@@ -1448,18 +1450,46 @@ def render_page() -> None:
     _sync_default_coordinates(shelters_frame)
 
     st.sidebar.header("안내 설정")
+    browser_location_payload: object | None = None
     refresh_requested = st.sidebar.button("재난문자 새로고침", use_container_width=True)
     crawled_alerts, crawl_error = _get_live_crawled_alerts(refresh_requested)
     crawl_updated_at = str(st.session_state.get(_state_key("live_crawled_alerts_updated_at"), "-"))
     st.sidebar.caption(f"최근 갱신: {crawl_updated_at}")
 
+    st.sidebar.markdown("위치 입력 방식")
     st.sidebar.radio(
         "위치 입력 방식",
         options=["auto", "manual"],
         format_func=lambda mode: "자동" if mode == "auto" else "수동",
         key=_state_key("location_mode"),
         horizontal=True,
+        label_visibility="collapsed",
     )
+
+    metric_placeholder = st.empty()
+    map_body_placeholder = None
+    top3_body_placeholder = None
+    with st.container():
+        map_column, top3_column = st.columns([1.45, 1.05], gap="medium")
+        with map_column:
+            with st.container(border=True, height=SHOWCASE_PANEL_HEIGHT_PX):
+                map_header_column, map_action_column = st.columns(
+                    [0.93, 0.07],
+                    gap="small",
+                    vertical_alignment="center",
+                )
+                with map_header_column:
+                    st.subheader("지도")
+                with map_action_column:
+                    if streamlit_geolocation is not None:
+                        browser_location_payload = streamlit_geolocation()
+                st.caption("감지 지역 기준 최신 재난문자 경로를 확인합니다.")
+                map_body_placeholder = st.empty()
+
+        with top3_column:
+            with st.container(border=True, height=SHOWCASE_PANEL_HEIGHT_PX):
+                render_section_header("대피소 안내")
+                top3_body_placeholder = st.empty()
 
     if crawl_error:
         st.warning(crawl_error)
@@ -1471,7 +1501,7 @@ def render_page() -> None:
             )
         else:
             st.sidebar.caption("브라우저 위치 권한을 허용하면 현재 좌표가 자동으로 반영됩니다.")
-            _apply_browser_location(streamlit_geolocation())
+            _apply_browser_location(browser_location_payload)
     else:
         st.sidebar.caption("수동 모드에서는 아래 입력한 좌표를 우선합니다.")
 
@@ -1573,49 +1603,45 @@ def render_page() -> None:
     )
     tsunami_policy_message = str(tsunami_policy.get("message") or "")
 
-    metric_columns = st.columns(2, gap="medium")
-    metric_columns[0].metric(
-        "위치 소스",
-        format_location_source_label(st.session_state.get(_state_key("location_source"))),
-    )
-    metric_columns[1].metric("감지 지역", f"{active_sido} {active_sigungu}")
+    with metric_placeholder.container():
+        metric_columns = st.columns(2, gap="medium")
+        metric_columns[0].metric(
+            "위치 소스",
+            format_location_source_label(st.session_state.get(_state_key("location_source"))),
+        )
+        metric_columns[1].metric("감지 지역", f"{active_sido} {active_sigungu}")
 
-    map_column, top3_column = st.columns([1.55, 0.95], gap="large")
-    with map_column:
-        with st.container(border=True):
-            render_section_header("지도", "감지 지역 기준 최신 재난문자 경로를 확인합니다.")
-            if not region_supported:
-                st.info("현재 위치는 재난문자 지원 권역 밖입니다.")
-            elif selected_alert is None:
-                st.info("현재 감지 지역에 적용할 최신 재난문자가 없습니다.")
-            elif recommendations.empty:
-                st.info("추천 결과가 없습니다.")
-            elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
-                st.warning(tsunami_policy_message)
-                st.info(OFFICIAL_GUIDANCE_MESSAGE)
-            else:
-                components.html(map_html, height=560)
+    with map_body_placeholder.container():
+        if not region_supported:
+            st.info("현재 위치는 재난문자 지원 권역 밖입니다.")
+        elif selected_alert is None:
+            st.info("현재 감지 지역에 적용할 최신 재난문자가 없습니다.")
+        elif recommendations.empty:
+            st.info("추천 결과가 없습니다.")
+        elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
+            st.warning(tsunami_policy_message)
+            st.info(OFFICIAL_GUIDANCE_MESSAGE)
+        else:
+            components.html(map_html, height=SHOWCASE_MAP_HEIGHT_PX)
 
-    with top3_column:
-        with st.container(border=True):
-            render_section_header("대피소 안내")
-            if not region_supported:
-                st.info("현재 위치는 재난문자 지원 권역 밖입니다.")
-            elif selected_alert is None:
-                st.info("현재 감지 지역에 적용할 최신 재난문자가 없습니다.")
-            elif recommendations.empty:
-                st.info("현재 조건으로 추천할 대피소가 없습니다.")
-            elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
-                st.warning(tsunami_policy_message)
-                st.info(OFFICIAL_GUIDANCE_MESSAGE)
-            else:
-                _render_live_top3_cards(
-                    recommendations,
-                    route_details,
-                    is_tsunami=bool(tsunami_policy["is_tsunami"]),
-                )
-                if tsunami_policy["is_tsunami"]:
-                    st.info(TSUNAMI_ETA_WARNING_MESSAGE)
+    with top3_body_placeholder.container():
+        if not region_supported:
+            st.info("현재 위치는 재난문자 지원 권역 밖입니다.")
+        elif selected_alert is None:
+            st.info("현재 감지 지역에 적용할 최신 재난문자가 없습니다.")
+        elif recommendations.empty:
+            st.info("현재 조건으로 추천할 대피소가 없습니다.")
+        elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
+            st.warning(tsunami_policy_message)
+            st.info(OFFICIAL_GUIDANCE_MESSAGE)
+        else:
+            _render_live_top3_cards(
+                recommendations,
+                route_details,
+                is_tsunami=bool(tsunami_policy["is_tsunami"]),
+            )
+            if tsunami_policy["is_tsunami"]:
+                st.info(TSUNAMI_ETA_WARNING_MESSAGE)
 
     if route_warnings:
         for warning in dict.fromkeys(route_warnings):
