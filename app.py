@@ -23,11 +23,11 @@ TEXT_PRIMARY = "#e5eef9"
 TEXT_MUTED = "#94a3b8"
 
 PAGE_META = {
-    "home": {"label": "HOME", "url_path": "", "icon": "🏠"},
-    "simulation": {"label": "대피 안내 시뮬레이션", "url_path": "simulation", "icon": "🧭"},
-    "message_guidance": {"label": "실시간 대피 안내", "url_path": "live-guidance", "icon": "📡"},
-    "analysis": {"label": "데이터 분석", "url_path": "analysis", "icon": "📊"},
-    "map": {"label": "권역 대피소 지도", "url_path": "map", "icon": "🗺️"},
+    "home": {"label": "HOME", "url_path": ""},
+    "simulation": {"label": "대피 안내 시뮬레이션", "url_path": "simulation"},
+    "message_guidance": {"label": "실시간 대피 안내", "url_path": "live-guidance"},
+    "analysis": {"label": "데이터 분석", "url_path": "analysis"},
+    "map": {"label": "권역 대피소 지도", "url_path": "map"},
 }
 
 HOME_OVERVIEW_POINTS = [
@@ -161,25 +161,21 @@ def build_navigation() -> list[st.Page]:
         st.Page(
             base_dir / "pages" / "1_대피_안내_시뮬레이션.py",
             title=PAGE_META["simulation"]["label"],
-            icon=PAGE_META["simulation"]["icon"],
             url_path=PAGE_META["simulation"]["url_path"],
         ),
         st.Page(
             base_dir / "pages" / "2_실시간_대피_안내.py",
             title=PAGE_META["message_guidance"]["label"],
-            icon=PAGE_META["message_guidance"]["icon"],
             url_path=PAGE_META["message_guidance"]["url_path"],
         ),
         st.Page(
             base_dir / "pages" / "3_데이터_분석.py",
             title=PAGE_META["analysis"]["label"],
-            icon=PAGE_META["analysis"]["icon"],
             url_path=PAGE_META["analysis"]["url_path"],
         ),
         st.Page(
             base_dir / "pages" / "4_권역_대피소_지도.py",
             title=PAGE_META["map"]["label"],
-            icon=PAGE_META["map"]["icon"],
             url_path=PAGE_META["map"]["url_path"],
         ),
     ]
