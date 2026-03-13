@@ -228,6 +228,21 @@ def normalize_sigungu_name(value: str | None) -> str:
     return text
 
 
+def _ensure_shelter_derived_columns(dataframe: pd.DataFrame) -> pd.DataFrame:
+    shelters = dataframe.copy()
+    if "시군구정규화" not in shelters.columns and "시군구" in shelters.columns:
+        shelters["시군구정규화"] = shelters["시군구"].map(normalize_sigungu_name)
+    if "수용인원_정렬값" not in shelters.columns:
+        if "수용인원" in shelters.columns:
+            shelters["수용인원_정렬값"] = pd.to_numeric(
+                shelters["수용인원"],
+                errors="coerce",
+            ).fillna(0)
+        else:
+            shelters["수용인원_정렬값"] = 0
+    return shelters
+
+
 def resolve_data_dir(path_override: str | Path | None = None) -> Path:
     candidates: list[Path] = []
     if path_override is not None:
@@ -361,6 +376,7 @@ def load_tsunami_shelters_dataframe(path_override: str | None = None) -> pd.Data
 
 
 def _build_region_centers(shelters_frame: pd.DataFrame) -> pd.DataFrame:
+    shelters_frame = _ensure_shelter_derived_columns(shelters_frame)
     return (
         shelters_frame.groupby(["시도", "시군구", "시군구정규화"], as_index=False)
         .agg(
@@ -552,6 +568,9 @@ def recommend_shelters(
     sigungu: str,
     top_n: int = 3,
 ) -> pd.DataFrame:
+    shelters_frame = _ensure_shelter_derived_columns(shelters_frame)
+    earthquake_shelters_frame = _ensure_shelter_derived_columns(earthquake_shelters_frame)
+    tsunami_shelters_frame = _ensure_shelter_derived_columns(tsunami_shelters_frame)
     primary_candidates, primary_label = _build_primary_candidates(
         shelters_frame=shelters_frame,
         earthquake_shelters_frame=earthquake_shelters_frame,
@@ -1443,6 +1462,10 @@ def render_page() -> None:
     except FileNotFoundError as exc:
         st.error(str(exc))
         st.stop()
+
+    shelters_frame = _ensure_shelter_derived_columns(shelters_frame)
+    earthquake_shelters_frame = _ensure_shelter_derived_columns(earthquake_shelters_frame)
+    tsunami_shelters_frame = _ensure_shelter_derived_columns(tsunami_shelters_frame)
 
     st.session_state.setdefault(_state_key("last_request_id"), "")
     _sync_default_coordinates(shelters_frame)

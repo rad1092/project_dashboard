@@ -14,7 +14,6 @@ os.environ.setdefault("PROJECT_DASHBOARD_IMPORT_ONLY", "1")
 
 
 def load_project_module(relative_path: str, module_name: str):
-    # 테스트는 화면 실행이 아니라 helper 검증이 목적이라, 모든 페이지를 import-only로 읽는다.
     if module_name in sys.modules:
         return sys.modules[module_name]
 
@@ -35,13 +34,9 @@ def home_module():
 
 
 @pytest.fixture(scope="session")
-def dashboard_data_module():
-    return load_project_module("dashboard_data.py", "project_dashboard_data")
-
-
-@pytest.fixture(scope="session")
 def simulation_page_module():
     return load_project_module("pages/1_대피_안내_시뮬레이션.py", "project_dashboard_simulation")
+
 
 @pytest.fixture(scope="session")
 def analysis_page_module():
@@ -55,8 +50,6 @@ def live_guidance_page_module():
 
 @pytest.fixture()
 def sample_preprocessing_dir(tmp_path: Path) -> Path:
-    # 운영 CSV 전체를 들고 오지 않아도 되도록,
-    # 추천과 분석 흐름이 최소한으로 돌아갈 정도의 샘플 데이터만 만든다.
     base = tmp_path / "preprocessing_data"
     preprocessing = base / "preprocessing"
     preprocessing.mkdir(parents=True)
@@ -69,7 +62,7 @@ def sample_preprocessing_dir(tmp_path: Path) -> Path:
                 "발표시간": "2026-03-06 12:00",
                 "지역": "경북",
                 "시군구": "포항시",
-                "재난종류": "풍랑",
+                "재난종류": "강풍",
                 "특보등급": "주의보",
                 "해당지역": "포항 앞바다",
             },
@@ -85,7 +78,7 @@ def sample_preprocessing_dir(tmp_path: Path) -> Path:
                 "발표시간": "2026-03-05 09:00",
                 "지역": "부산",
                 "시군구": "해운대구",
-                "재난종류": "폭염",
+                "재난종류": "태풍",
                 "특보등급": "주의보",
                 "해당지역": "부산 해운대구",
             },
@@ -118,8 +111,8 @@ def sample_preprocessing_dir(tmp_path: Path) -> Path:
             },
             {
                 "대피소명": "안동 체육관",
-                "주소": "경북 안동시 풍천면 1",
-                "대피소유형": "무더위쉼터",
+                "주소": "경북 안동시 옥천면 1",
+                "대피소유형": "지진옥외대피장소,지진해일대피장소",
                 "위도": 36.5685,
                 "경도": 128.7294,
                 "시도": "경북",
@@ -129,13 +122,13 @@ def sample_preprocessing_dir(tmp_path: Path) -> Path:
             },
             {
                 "대피소명": "부산 통합대피소",
-                "주소": "부산 동구 1",
+                "주소": "부산 중구 1",
                 "대피소유형": "한파쉼터",
                 "위도": 35.538,
                 "경도": 129.312,
                 "시도": "부산",
-                "시군구": "동구",
-                "지역": "부산 동구",
+                "시군구": "중구",
+                "지역": "부산 중구",
                 "수용인원": 80,
             },
         ]
@@ -173,7 +166,7 @@ def sample_preprocessing_dir(tmp_path: Path) -> Path:
     pd.DataFrame(
         [
             {
-                "발표시각": "2026-03-06 14:00",
+                "발표시간": "2026-03-06 14:00",
                 "지역": "경북",
                 "시군구": "포항",
                 "재난종류": "호우",
@@ -183,32 +176,32 @@ def sample_preprocessing_dir(tmp_path: Path) -> Path:
                 "번호": "101",
             },
             {
-                "발표시각": "2026-03-06 13:30",
+                "발표시간": "2026-03-06 13:30",
                 "지역": "경북",
                 "시군구": "포항",
                 "재난종류": "해일",
                 "특보등급": "주의보",
-                "내용": "포항 연안 해일 주의",
+                "내용": "포항 해일 주의 발령",
                 "발송기관": "포항시",
                 "번호": "102",
             },
             {
-                "발표시각": "2026-03-06 12:30",
+                "발표시간": "2026-03-06 12:30",
                 "지역": "부산",
                 "시군구": "해운대구",
                 "재난종류": "풍랑",
                 "특보등급": "주의보",
-                "내용": "부산 연안 풍랑 주의",
+                "내용": "부산 풍랑 주의",
                 "발송기관": "부산광역시",
                 "번호": "103",
             },
             {
-                "발표시각": "2026-03-06 11:00",
+                "발표시간": "2026-03-06 11:00",
                 "지역": "경남",
                 "시군구": "창원",
-                "재난종류": "황사",
+                "재난종류": "산사태",
                 "특보등급": "주의보",
-                "내용": "경남 황사 주의",
+                "내용": "경남 산사태 주의",
                 "발송기관": "창원시",
                 "번호": "104",
             },

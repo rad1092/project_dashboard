@@ -225,6 +225,28 @@ def normalize_sigungu_name(value: str | None) -> str:
     return text
 
 
+def _ensure_alert_derived_columns(dataframe: pd.DataFrame) -> pd.DataFrame:
+    alerts = dataframe.copy()
+    if "시군구정규화" not in alerts.columns and "시군구" in alerts.columns:
+        alerts["시군구정규화"] = alerts["시군구"].map(normalize_sigungu_name)
+    return alerts
+
+
+def _ensure_shelter_derived_columns(dataframe: pd.DataFrame) -> pd.DataFrame:
+    shelters = dataframe.copy()
+    if "시군구정규화" not in shelters.columns and "시군구" in shelters.columns:
+        shelters["시군구정규화"] = shelters["시군구"].map(normalize_sigungu_name)
+    if "수용인원_정렬값" not in shelters.columns:
+        if "수용인원" in shelters.columns:
+            shelters["수용인원_정렬값"] = pd.to_numeric(
+                shelters["수용인원"],
+                errors="coerce",
+            ).fillna(0)
+        else:
+            shelters["수용인원_정렬값"] = 0
+    return shelters
+
+
 def resolve_data_dir(path_override: str | Path | None = None) -> Path:
     candidates: list[Path] = []
     if path_override is not None:
@@ -389,6 +411,7 @@ def classify_disaster_type(disaster_name: str | None) -> str:
 
 
 def _build_region_centers(shelters_frame: pd.DataFrame) -> pd.DataFrame:
+    shelters_frame = _ensure_shelter_derived_columns(shelters_frame)
     return (
         shelters_frame.groupby(["시도", "시군구", "시군구정규화"], as_index=False)
         .agg(
@@ -461,6 +484,7 @@ def get_recent_alerts(
     sigungu: str | None = None,
     limit: int = 5,
 ) -> pd.DataFrame:
+    alerts_frame = _ensure_alert_derived_columns(alerts_frame)
     filtered = alerts_frame[alerts_frame["지역"] == sido]
     if sigungu:
         filtered = filtered[filtered["시군구정규화"] == normalize_sigungu_name(sigungu)]
@@ -632,6 +656,9 @@ def recommend_shelters(
     sigungu: str,
     top_n: int = 3,
 ) -> pd.DataFrame:
+    shelters_frame = _ensure_shelter_derived_columns(shelters_frame)
+    earthquake_shelters_frame = _ensure_shelter_derived_columns(earthquake_shelters_frame)
+    tsunami_shelters_frame = _ensure_shelter_derived_columns(tsunami_shelters_frame)
     primary_candidates, primary_label = _build_primary_candidates(
         shelters_frame=shelters_frame,
         earthquake_shelters_frame=earthquake_shelters_frame,
@@ -912,8 +939,9 @@ def _get_osrm_route_detail(
 ) -> dict[str, object]:
     normalized_origin = _normalize_point(origin)
     normalized_destination = _normalize_point(destination)
+    normalized_base_url = base_url.rstrip("/")
     route_path = (
-        f"{base_url}/route/v1/{profile}/"
+        f"{normalized_base_url}/route/v1/{profile}/"
         f"{normalized_origin['x']},{normalized_origin['y']};"
         f"{normalized_destination['x']},{normalized_destination['y']}"
     )
@@ -1305,6 +1333,11 @@ def render_page() -> None:
     except FileNotFoundError as exc:
         st.error(str(exc))
         st.stop()
+
+    alerts_frame = _ensure_alert_derived_columns(alerts_frame)
+    shelters_frame = _ensure_shelter_derived_columns(shelters_frame)
+    earthquake_shelters_frame = _ensure_shelter_derived_columns(earthquake_shelters_frame)
+    tsunami_shelters_frame = _ensure_shelter_derived_columns(tsunami_shelters_frame)
 
     st.session_state.setdefault("realtime_selected_disaster", None)
     st.session_state.setdefault("realtime_last_request_id", "")

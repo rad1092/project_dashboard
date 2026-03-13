@@ -4,7 +4,8 @@ def test_home_page_meta_and_copy_are_present(home_module) -> None:
     assert expected_keys == set(home_module.PAGE_META.keys())
     assert home_module.PAGE_META["home"]["label"] == "HOME"
     assert home_module.PAGE_META["analysis"]["label"] == "데이터 분석"
-    assert home_module.HOME_OVERVIEW_POINTS
+    assert home_module.HOME_HEADLINE == "실시간 대피 안내 대시보드"
+    assert home_module.HOME_SUBTITLE
 
 
 def test_home_navigation_contains_five_pages(home_module) -> None:
@@ -25,3 +26,4 @@ def test_home_page_kpis_can_be_built_from_analysis_dataset(home_module, sample_p
     assert len(tsunami_frame) == 1
     assert kpis["alert_count"] == 3
     assert kpis["region_count"] == 2
+    assert kpis["warning_count"] == 1

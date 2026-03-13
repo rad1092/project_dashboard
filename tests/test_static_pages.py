@@ -40,7 +40,6 @@ def test_analysis_page_runtime_shape(analysis_page_module) -> None:
 def test_app_and_pages_compile_without_writing_bytecode() -> None:
     for path in [
         Path("app.py"),
-        Path("dashboard_data.py"),
         *Path("pages").glob("*.py"),
     ]:
         source = path.read_text(encoding="utf-8")
