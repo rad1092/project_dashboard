@@ -10,6 +10,7 @@ from textwrap import dedent
 from typing import Any
 
 import folium
+import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
@@ -571,14 +572,11 @@ def infer_region_from_coordinates(
         }
 
     scored = region_centers.copy()
-    scored["distance_km"] = scored.apply(
-        lambda row: haversine_km(
-            latitude,
-            longitude,
-            float(row["중심위도"]),
-            float(row["중심경도"]),
-        ),
-        axis=1,
+    scored["distance_km"] = haversine_km(
+        latitude,
+        longitude,
+        scored["중심위도"].astype(float),
+        scored["중심경도"].astype(float),
     )
     scored = scored.sort_values(["distance_km", "대피소수"], ascending=[True, False]).reset_index(
         drop=True
@@ -666,22 +664,22 @@ def should_compute_recommendations(selected_disaster: str | None) -> bool:
 def haversine_km(
     latitude_a: float,
     longitude_a: float,
-    latitude_b: float,
-    longitude_b: float,
-) -> float:
+    latitude_b: Any,
+    longitude_b: Any,
+) -> Any:
     earth_radius_km = 6371.0
     lat_a = math.radians(latitude_a)
     lon_a = math.radians(longitude_a)
-    lat_b = math.radians(latitude_b)
-    lon_b = math.radians(longitude_b)
+    lat_b = np.radians(latitude_b)
+    lon_b = np.radians(longitude_b)
 
     delta_lat = lat_b - lat_a
     delta_lon = lon_b - lon_a
     haversine_value = (
-        math.sin(delta_lat / 2) ** 2
-        + math.cos(lat_a) * math.cos(lat_b) * math.sin(delta_lon / 2) ** 2
+        np.sin(delta_lat / 2) ** 2
+        + math.cos(lat_a) * np.cos(lat_b) * np.sin(delta_lon / 2) ** 2
     )
-    return earth_radius_km * 2 * math.asin(math.sqrt(haversine_value))
+    return earth_radius_km * 2 * np.arcsin(np.sqrt(haversine_value))
 
 
 def _filter_by_region(dataframe: pd.DataFrame, sido: str, sigungu: str) -> pd.DataFrame:
@@ -741,9 +739,11 @@ def _score_candidates(
         return dataframe.copy()
 
     scored = dataframe.copy()
-    scored["거리_km"] = scored.apply(
-        lambda row: haversine_km(latitude, longitude, float(row["위도"]), float(row["경도"])),
-        axis=1,
+    scored["거리_km"] = haversine_km(
+        latitude,
+        longitude,
+        scored["위도"].astype(float),
+        scored["경도"].astype(float),
     )
     scored["추천구분"] = recommendation_type
     scored["추천사유"] = (

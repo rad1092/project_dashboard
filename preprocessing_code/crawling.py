@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import re
+import sys
 import time
+from pathlib import Path
 
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 BASE_URL = "https://www.safetydata.go.kr/disaster-data/disasterNotification"
+SYSTEM_CHROME_BINARY_PATH = Path("/usr/bin/chromium")
+SYSTEM_CHROMEDRIVER_PATH = Path("/usr/bin/chromedriver")
 
 REGION_MAP = {
     "경북": [
@@ -257,13 +262,43 @@ def crawl_one_page(driver, wait) -> pd.DataFrame:
     return pd.DataFrame(rows_data)
 
 
-def crawl_disaster_notifications(*, headless: bool = True, wait_seconds: int = 15) -> pd.DataFrame:
+def _running_on_linux() -> bool:
+    return sys.platform.startswith("linux")
+
+
+def _resolve_system_path(path: Path) -> Path | None:
+    if not _running_on_linux():
+        return None
+    if path.exists():
+        return path
+    return None
+
+
+def _build_chrome_options(*, headless: bool = True) -> Options:
     options = Options()
     if headless:
         options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1600,1200")
 
-    driver = webdriver.Chrome(options=options)
+    binary_path = _resolve_system_path(SYSTEM_CHROME_BINARY_PATH)
+    if binary_path is not None:
+        options.binary_location = str(binary_path)
+    return options
+
+
+def _build_chrome_driver_kwargs(*, headless: bool = True) -> dict[str, object]:
+    driver_kwargs: dict[str, object] = {"options": _build_chrome_options(headless=headless)}
+
+    driver_path = _resolve_system_path(SYSTEM_CHROMEDRIVER_PATH)
+    if driver_path is not None:
+        driver_kwargs["service"] = Service(executable_path=str(driver_path))
+    return driver_kwargs
+
+
+def crawl_disaster_notifications(*, headless: bool = True, wait_seconds: int = 15) -> pd.DataFrame:
+    driver = webdriver.Chrome(**_build_chrome_driver_kwargs(headless=headless))
     try:
         wait = WebDriverWait(driver, wait_seconds)
         driver.get(BASE_URL)

@@ -56,6 +56,14 @@ def mock_disaster_message_module():
     )
 
 
+@pytest.fixture(scope="session")
+def crawling_module():
+    return load_project_module(
+        "preprocessing_code/crawling.py",
+        "project_dashboard_live_crawling",
+    )
+
+
 @pytest.fixture()
 def sample_preprocessing_dir(tmp_path: Path) -> Path:
     base = tmp_path / "preprocessing_data"

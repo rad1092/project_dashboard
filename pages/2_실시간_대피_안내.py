@@ -13,6 +13,7 @@ from textwrap import dedent
 from typing import Any
 
 import folium
+import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
@@ -549,14 +550,11 @@ def infer_region_from_coordinates(
         }
 
     scored = region_centers.copy()
-    scored["distance_km"] = scored.apply(
-        lambda row: haversine_km(
-            latitude,
-            longitude,
-            float(row["중심위도"]),
-            float(row["중심경도"]),
-        ),
-        axis=1,
+    scored["distance_km"] = haversine_km(
+        latitude,
+        longitude,
+        scored["중심위도"].astype(float),
+        scored["중심경도"].astype(float),
     )
     scored = scored.sort_values(["distance_km", "대피소수"], ascending=[True, False]).reset_index(
         drop=True
@@ -591,22 +589,22 @@ def get_region_center(
 def haversine_km(
     latitude_a: float,
     longitude_a: float,
-    latitude_b: float,
-    longitude_b: float,
-) -> float:
+    latitude_b: Any,
+    longitude_b: Any,
+) -> Any:
     earth_radius_km = 6371.0
     lat_a = math.radians(latitude_a)
     lon_a = math.radians(longitude_a)
-    lat_b = math.radians(latitude_b)
-    lon_b = math.radians(longitude_b)
+    lat_b = np.radians(latitude_b)
+    lon_b = np.radians(longitude_b)
 
     delta_lat = lat_b - lat_a
     delta_lon = lon_b - lon_a
     haversine_value = (
-        math.sin(delta_lat / 2) ** 2
-        + math.cos(lat_a) * math.cos(lat_b) * math.sin(delta_lon / 2) ** 2
+        np.sin(delta_lat / 2) ** 2
+        + math.cos(lat_a) * np.cos(lat_b) * np.sin(delta_lon / 2) ** 2
     )
-    return earth_radius_km * 2 * math.asin(math.sqrt(haversine_value))
+    return earth_radius_km * 2 * np.arcsin(np.sqrt(haversine_value))
 
 
 def _filter_by_region(dataframe: pd.DataFrame, sido: str, sigungu: str) -> pd.DataFrame:
@@ -666,9 +664,11 @@ def _score_candidates(
         return dataframe.copy()
 
     scored = dataframe.copy()
-    scored["거리_km"] = scored.apply(
-        lambda row: haversine_km(latitude, longitude, float(row["위도"]), float(row["경도"])),
-        axis=1,
+    scored["거리_km"] = haversine_km(
+        latitude,
+        longitude,
+        scored["위도"].astype(float),
+        scored["경도"].astype(float),
     )
     scored["추천구분"] = recommendation_type
     scored["추천사유"] = (
@@ -928,25 +928,13 @@ def load_crawled_alerts_dataframe_uncached(path_override: str | Path | None = No
 
 def load_live_crawled_alerts_dataframe_uncached(*, headless: bool = True) -> pd.DataFrame:
     crawling_module = load_crawling_module()
-    options = crawling_module.Options()
-    if headless:
-        options.add_argument("--headless=new")
-    options.add_argument("--window-size=1600,1200")
-
-    driver = None
     try:
-        driver = crawling_module.webdriver.Chrome(options=options)
-        wait = crawling_module.WebDriverWait(driver, DEFAULT_CRAWLING_WAIT_SECONDS)
-        driver.get(crawling_module.BASE_URL)
-        dataframe = crawling_module.crawl_one_page(driver, wait)
+        dataframe = crawling_module.crawl_disaster_notifications(
+            headless=headless,
+            wait_seconds=DEFAULT_CRAWLING_WAIT_SECONDS,
+        )
     except Exception as exc:
         raise RuntimeError(f"실시간 재난문자 크롤링 실행 실패: {exc}") from exc
-    finally:
-        if driver is not None:
-            try:
-                driver.quit()
-            except Exception:
-                pass
 
     if not isinstance(dataframe, pd.DataFrame):
         raise RuntimeError("실시간 재난문자 크롤링 결과가 DataFrame이 아니다.")
