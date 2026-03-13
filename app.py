@@ -246,7 +246,7 @@ def build_kpis(dataframe: pd.DataFrame) -> dict[str, object]:
 
 def configure_page(
     page_title: str,
-    page_icon: str,
+    page_icon: str | None,
     *,
     initial_sidebar_state: str = "expanded",
     set_page_config: bool = True,
@@ -436,7 +436,7 @@ def build_navigation() -> list[st.Page]:
 
 def main() -> None:
     configure_page(page_title=APP_TITLE, page_icon=APP_ICON)
-    current_page = st.navigation(build_navigation(), position="sidebar")
+    current_page = st.navigation(build_navigation(), position="sidebar", expanded=True)
     current_page.run()
 
 
