@@ -297,6 +297,6 @@ def test_build_realtime_recommendation_map_uses_row_display_style(request, fixtu
 
 
 def test_simulation_page_module_imports(simulation_page_module) -> None:
-    assert simulation_page_module.PAGE_LABEL == "대피 안내 시뮬레이션"
+    assert simulation_page_module.PAGE_LABEL == "대피 시뮬레이션"
     assert hasattr(simulation_page_module, "render_page")
     assert hasattr(simulation_page_module, "_build_route_bundle")

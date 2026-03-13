@@ -15,10 +15,9 @@ TEXT_MUTED = "#94a3b8"
 
 PAGE_META = {
     "home": {"label": "HOME", "url_path": ""},
-    "simulation": {"label": "대피 안내 시뮬레이션", "url_path": "simulation"},
+    "simulation": {"label": "대피 시뮬레이션", "url_path": "simulation"},
     "message_guidance": {"label": "실시간 대피 안내", "url_path": "live-guidance"},
     "analysis": {"label": "데이터 분석", "url_path": "analysis"},
-    "map": {"label": "권역 대피소 지도", "url_path": "map"},
 }
 
 HOME_HEADLINE = "실시간 대피 안내 대시보드"
@@ -259,6 +258,7 @@ def configure_page(
             layout="wide",
             initial_sidebar_state=initial_sidebar_state,
         )
+    inject_shared_card_styles()
 
 
 def render_page_title(title: str, caption: str = "") -> None:
@@ -271,6 +271,58 @@ def render_section_header(title: str, caption: str = "") -> None:
     st.subheader(title)
     if caption:
         st.caption(caption)
+
+
+def inject_shared_card_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stMetric"] {
+            padding: 1.15rem 1.2rem;
+            border-radius: 24px;
+            border: 1px solid rgba(56, 189, 248, 0.20);
+            background:
+                radial-gradient(circle at top left, rgba(20, 184, 166, 0.20), transparent 34%),
+                radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.18), transparent 28%),
+                linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.92));
+            box-shadow: 0 18px 48px rgba(15, 23, 42, 0.24);
+        }
+        div[data-testid="stMetricLabel"] p {
+            color: #94a3b8;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+        div[data-testid="stMetricValue"] {
+            color: #f8fafc;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            border-radius: 28px;
+            border: 1px solid rgba(56, 189, 248, 0.20);
+            background:
+                radial-gradient(circle at top left, rgba(20, 184, 166, 0.22), transparent 36%),
+                radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.18), transparent 30%),
+                linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.92));
+            box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+            overflow: hidden;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"] > div {
+            background: transparent;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"] iframe {
+            border-radius: 22px;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stPlotlyChart"] > div,
+        div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stDataFrame"] {
+            border-radius: 22px;
+            overflow: hidden;
+        }
+        div[data-testid="stTabs"] [data-baseweb="tab-panel"] {
+            padding-top: 0.8rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def style_plotly_figure(figure: go.Figure) -> go.Figure:
@@ -428,11 +480,6 @@ def build_navigation() -> list[st.Page]:
             title=PAGE_META["analysis"]["label"],
             url_path=PAGE_META["analysis"]["url_path"],
         ),
-        st.Page(
-            base_dir / "pages" / "4_권역_대피소_지도.py",
-            title=PAGE_META["map"]["label"],
-            url_path=PAGE_META["map"]["url_path"],
-        ),
     ]
 
 
@@ -444,3 +491,6 @@ def main() -> None:
 
 if __name__ == "__main__" and os.environ.get("PROJECT_DASHBOARD_IMPORT_ONLY") != "1":
     main()
+
+
+"#84B8F3"

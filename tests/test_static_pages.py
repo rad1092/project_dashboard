@@ -17,12 +17,11 @@ def test_docs_exist_with_current_sections() -> None:
     assert "`pages/1_대피_안내_시뮬레이션.py`" in flow_document
     assert "`pages/2_실시간_대피_안내.py`" in flow_document
     assert "`pages/3_데이터_분석.py`" in flow_document
-    assert "`pages/4_권역_대피소_지도.py`" in flow_document
     assert "`PROJECT_DASHBOARD_IMPORT_ONLY=1`" in test_document
 
 
 def test_simulation_page_runtime_shape(simulation_page_module) -> None:
-    assert simulation_page_module.PAGE_LABEL == "대피 안내 시뮬레이션"
+    assert simulation_page_module.PAGE_LABEL == "대피 시뮬레이션"
     assert hasattr(simulation_page_module, "render_page")
     assert hasattr(simulation_page_module, "_build_route_bundle")
 

@@ -83,10 +83,10 @@ CARD_TEXT_PRIMARY = "#e5eef9"
 CARD_TEXT_MUTED = "#94a3b8"
 CARD_DIVIDER = "rgba(148, 163, 184, 0.16)"
 CARD_ROW_BACKGROUND = "rgba(148, 163, 184, 0.04)"
-SHOWCASE_CARD_SCALE = 0.8
-SHOWCASE_CARD_STACK_GAP_REM = 3.70
-SHOWCASE_PANEL_HEIGHT_PX = 710
-SHOWCASE_MAP_HEIGHT_PX = 610
+SHOWCASE_CARD_SCALE = 0.76
+SHOWCASE_CARD_STACK_GAP_REM = 3.10
+SHOWCASE_PANEL_HEIGHT_PX = 680
+SHOWCASE_MAP_HEIGHT_PX = 570
 CRAWLING_MODULE_NAME = "project_dashboard_live_crawling_runtime"
 CRAWLING_MODULE_PATH = Path(__file__).resolve().parents[1] / "preprocessing_code" / "crawling.py"
 MOCK_DISASTER_MODULE_NAME = "project_dashboard_mock_disaster_message_runtime"
@@ -135,6 +135,33 @@ def _scaled_rem(value: float) -> str:
     return f"{value * SHOWCASE_CARD_SCALE:.2f}rem"
 
 
+def _mix_hex_color(color: str, target: str, target_weight: float) -> str:
+    source = color.strip().lstrip("#")
+    destination = target.strip().lstrip("#")
+    if len(source) != 6 or len(destination) != 6:
+        return color
+
+    weight = max(0.0, min(1.0, target_weight))
+    channels = []
+    for index in range(0, 6, 2):
+        source_channel = int(source[index : index + 2], 16)
+        destination_channel = int(destination[index : index + 2], 16)
+        mixed_channel = round((source_channel * (1 - weight)) + (destination_channel * weight))
+        channels.append(f"{mixed_channel:02x}")
+    return f"#{''.join(channels)}"
+
+
+def _is_green_family_color(color: str) -> bool:
+    value = color.strip().lstrip("#")
+    if len(value) != 6:
+        return False
+
+    red = int(value[0:2], 16)
+    green = int(value[2:4], 16)
+    blue = int(value[4:6], 16)
+    return green > red and green >= blue
+
+
 def build_shelter_summary_card_html(
     title: str,
     rows: Sequence[tuple[str, str]],
@@ -142,14 +169,22 @@ def build_shelter_summary_card_html(
     accent_color: str,
     note: str | None = None,
 ) -> str:
-    surface_top = "#fbf7ef"
-    surface_bottom = "#efe5d4"
-    surface_border = "rgba(120, 105, 84, 0.18)"
-    meta_background = "#e7dcc9"
-    meta_border = "rgba(120, 105, 84, 0.14)"
-    text_primary = "#1f2937"
-    text_muted = "#6b6458"
-    divider_color = "rgba(120, 105, 84, 0.14)"
+    accent_seed = accent_color
+    if _is_green_family_color(accent_color):
+        accent_seed = "#33FF33"
+
+    vivid_accent = _mix_hex_color(accent_seed, "#f8fafc", 0.16)
+    accent_glow_strong = f"{vivid_accent}90"
+    accent_glow_soft = f"{vivid_accent}54"
+    surface_border = _mix_hex_color(accent_seed, "#f8fafc", 0.42)
+    meta_background = "rgba(8, 17, 28, 0.72)"
+    meta_border = "rgba(56, 189, 248, 0.12)"
+    text_primary = CARD_TEXT_PRIMARY
+    text_muted = CARD_TEXT_MUTED
+    divider_color = CARD_DIVIDER
+    meta_text_font_size = f"calc({_scaled_rem(0.74)} + 2px)"
+    meta_row_min_height = _scaled_rem(1.34)
+    note_slot_min_height = _scaled_rem(1.72)
     family_value = ""
     meta_rows: list[tuple[str, str]] = []
 
@@ -167,6 +202,9 @@ def build_shelter_summary_card_html(
             " align-items: center;"
             f" gap: {_scaled_rem(0.22)};"
             " min-width: 0;"
+            f" min-height: {meta_row_min_height};"
+            " box-sizing: border-box;"
+            " align-self: stretch;"
             f" padding: {_scaled_rem(0.26)} {_scaled_rem(0.5)};"
         )
         if index > 0:
@@ -178,8 +216,9 @@ def build_shelter_summary_card_html(
 
         value_style = (
             f"color: {text_primary};"
-            f" font-size: {_scaled_rem(0.82)};"
+            f" font-size: {meta_text_font_size};"
             " font-weight: 700;"
+            " line-height: 1.15;"
             " min-width: 0;"
             " overflow: hidden;"
             " text-overflow: ellipsis;"
@@ -192,8 +231,9 @@ def build_shelter_summary_card_html(
 <div class="pd-shelter-summary-card__meta-item" style="{item_style}">
     <span class="pd-shelter-summary-card__label" style="
         color: {text_muted};
-        font-size: {_scaled_rem(0.68)};
+        font-size: {meta_text_font_size};
         font-weight: 700;
+        line-height: 1.15;
         letter-spacing: -0.01em;
         white-space: nowrap;
         flex-shrink: 0;
@@ -207,50 +247,63 @@ def build_shelter_summary_card_html(
     if family_value:
         family_block = dedent(
             f"""\
-<div class="pd-shelter-summary-card__family" style="
+<div style="
     margin-top: {_scaled_rem(0.26)};
+    display: flex;
+    justify-content: flex-end;
+    min-width: 0;
+">
+<div class="pd-shelter-summary-card__family" style="
     display: inline-flex;
     align-items: center;
     gap: {_scaled_rem(0.24)};
     min-width: 0;
     max-width: 100%;
+    min-height: {meta_row_min_height};
+    box-sizing: border-box;
     padding: {_scaled_rem(0.18)} {_scaled_rem(0.5)};
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.55);
-    border: 1px solid rgba(120, 105, 84, 0.1);
+    background: rgba(8, 17, 28, 0.6);
+    border: 1px solid rgba(56, 189, 248, 0.12);
 ">
-    <span style="
-        color: {text_muted};
-        font-size: {_scaled_rem(0.64)};
-        font-weight: 700;
-        white-space: nowrap;
-        flex-shrink: 0;
-    ">대피소 계열</span>
-    <span style="
-        color: {text_primary};
-        font-size: {_scaled_rem(0.72)};
-        font-weight: 700;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    ">{_escape_card_text(family_value)}</span>
+        <span style="
+            color: {text_muted};
+            font-size: {meta_text_font_size};
+            font-weight: 700;
+            line-height: 1.15;
+            white-space: nowrap;
+            flex-shrink: 0;
+        ">대피소 계열</span>
+        <span style="
+            color: {text_primary};
+            font-size: {meta_text_font_size};
+            font-weight: 700;
+            line-height: 1.15;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        ">{_escape_card_text(family_value)}</span>
+</div>
 </div>"""
         ).strip()
 
-    note_block = ""
-    if note:
-        note_block = dedent(
-            f"""\
+    note_content = _escape_card_text(note) if note else "&nbsp;"
+    note_visibility = "visible" if note else "hidden"
+    note_border = f"1px solid {divider_color}" if note else "1px solid transparent"
+    note_block = dedent(
+        f"""\
 <div class="pd-shelter-summary-card__note" style="
     margin-top: {_scaled_rem(0.44)};
+    min-height: {note_slot_min_height};
     padding-top: {_scaled_rem(0.48)};
-    border-top: 1px solid {divider_color};
+    border-top: {note_border};
     color: {text_muted};
     font-size: {_scaled_rem(0.72)};
     line-height: 1.3;
-">{_escape_card_text(note)}</div>"""
-        ).strip()
+    visibility: {note_visibility};
+">{note_content}</div>"""
+    ).strip()
 
     parts = [
         dedent(
@@ -258,13 +311,17 @@ def build_shelter_summary_card_html(
 <div class="pd-shelter-summary-card" style="
     color: {text_primary};
     margin-bottom: {_scaled_rem(SHOWCASE_CARD_STACK_GAP_REM)};
+    display: flex;
+    flex-direction: column;
     padding: {_scaled_rem(0.74)} {_scaled_rem(0.9)};
     border-radius: {_scaled_rem(1.1)};
-    border: 1px solid {surface_border};
+    border: 2px solid {surface_border};
     background:
-        radial-gradient(circle at top right, rgba(255, 255, 255, 0.65), transparent 32%),
-        linear-gradient(180deg, {surface_top}, {surface_bottom});
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+        radial-gradient(circle at top left, {accent_glow_strong}, transparent 32%),
+        radial-gradient(circle at center right, {accent_glow_soft}, transparent 44%),
+        radial-gradient(circle at bottom left, {accent_glow_soft}, transparent 28%),
+        linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.92));
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
     overflow: hidden;
 ">"""
         ).strip(),
@@ -272,22 +329,12 @@ def build_shelter_summary_card_html(
             f"""\
 <div class="pd-shelter-summary-card__hero" style="
     display: flex;
-    gap: {_scaled_rem(0.62)};
     align-items: center;
 ">
-    <div class="pd-shelter-summary-card__accent" style="
-        width: {_scaled_rem(2.18)};
-        height: {_scaled_rem(2.18)};
-        flex-shrink: 0;
-        border-radius: 999px;
-        background: {accent_color};
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        box-shadow: 0 0 0 {_scaled_rem(0.2)} rgba(255, 255, 255, 0.03);
-    "></div>
     <div style="min-width: 0; flex: 1;">
         <div class="pd-shelter-summary-card__title" style="
             margin: 0;
-            color: {accent_color};
+            color: {CARD_TEXT_PRIMARY};
             font-size: {_scaled_rem(2.62)};
             font-weight: 800;
             line-height: 1.0;
@@ -304,7 +351,7 @@ def build_shelter_summary_card_html(
             f"""\
 <div class="pd-shelter-summary-card__meta-bar" style="
     display: flex;
-    align-items: center;
+    align-items: stretch;
     gap: 0;
     min-width: 0;
     margin-top: {_scaled_rem(0.7)};
@@ -317,8 +364,7 @@ def build_shelter_summary_card_html(
         "\n".join(meta_blocks),
         "</div>",
     ]
-    if note_block:
-        parts.append(note_block)
+    parts.append(note_block)
     parts.append("</div>")
     return "\n".join(parts)
 
@@ -1056,8 +1102,8 @@ def build_current_alert_summary_card_html(summary: Mapping[str, str]) -> str:
     min-width: 0;
     padding: 0.42rem 0.74rem;
     border-radius: 999px;
-    border: 1px solid rgba(59, 130, 246, 0.14);
-    background: rgba(15, 23, 42, 0.62);
+    border: 1px solid rgba(56, 189, 248, 0.12);
+    background: rgba(8, 17, 28, 0.68);
 ">
     <span style="
         color: {CARD_TEXT_MUTED};
@@ -1102,19 +1148,20 @@ def build_current_alert_summary_card_html(summary: Mapping[str, str]) -> str:
     margin-top: 0.9rem;
     padding: 0.9rem 1rem;
     border-radius: 1rem;
-    border: 1px solid rgba(56, 189, 248, 0.18);
+    border: 1px solid rgba(56, 189, 248, 0.20);
     background:
-        radial-gradient(circle at top right, rgba(20, 184, 166, 0.14), transparent 28%),
-        linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(15, 23, 42, 0.94));
-    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.2);
+        radial-gradient(circle at top left, rgba(20, 184, 166, 0.22), transparent 36%),
+        radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.18), transparent 30%),
+        linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.92));
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
 ">
     <div class="pd-current-alert-strip__badge" style="
         flex-shrink: 0;
         padding: 0.42rem 0.78rem;
         border-radius: 999px;
-        background: rgba(14, 165, 233, 0.16);
-        border: 1px solid rgba(56, 189, 248, 0.24);
-        color: #bae6fd;
+        background: rgba(20, 184, 166, 0.16);
+        border: 1px solid rgba(94, 234, 212, 0.22);
+        color: #ccfbf1;
         font-size: 0.84rem;
         font-weight: 800;
         letter-spacing: -0.01em;
@@ -1129,8 +1176,8 @@ def build_current_alert_summary_card_html(summary: Mapping[str, str]) -> str:
         flex: 1 1 16rem;
         padding: 0.42rem 0.78rem;
         border-radius: 0.92rem;
-        border: 1px solid rgba(59, 130, 246, 0.14);
-        background: rgba(15, 23, 42, 0.62);
+        border: 1px solid rgba(56, 189, 248, 0.12);
+        background: rgba(8, 17, 28, 0.68);
     ">
         <span style="
             color: {CARD_TEXT_MUTED};
@@ -1963,10 +2010,11 @@ def render_page() -> None:
                 map_body_placeholder = st.empty()
 
         with top3_column:
-            with st.container(**_get_shelter_info_panel_kwargs()):
-                st.subheader("대피소 정보")
-                st.caption("추천 대피소 위치와 정보를 확인합니다.")
-                top3_body_placeholder = st.empty()
+            with st.container(border=True):
+                with st.container(**_get_shelter_info_panel_kwargs()):
+                    st.subheader("대피소 정보")
+                    st.caption("추천 대피소 위치와 정보를 확인합니다.")
+                    top3_body_placeholder = st.empty()
     alert_summary_placeholder = st.empty()
 
     if st.session_state[_state_key("location_mode")] == "auto":
