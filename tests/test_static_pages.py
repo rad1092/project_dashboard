@@ -14,7 +14,7 @@ def test_docs_exist_with_current_sections() -> None:
     assert FLOW_DOC_PATH.exists()
     assert TEST_DOC_PATH.exists()
     assert "`app.py`" in structure_document
-    assert "`pages/1_대피_시뮬레이션.py`" in flow_document
+    assert "`pages/1_대피_안내_시뮬레이션.py`" in flow_document
     assert "`pages/2_실시간_대피_안내.py`" in flow_document
     assert "`pages/3_데이터_분석.py`" in flow_document
     assert "`PROJECT_DASHBOARD_IMPORT_ONLY=1`" in test_document

@@ -35,7 +35,7 @@ def home_module():
 
 @pytest.fixture(scope="session")
 def simulation_page_module():
-    return load_project_module("pages/1_대피_시뮬레이션.py", "project_dashboard_simulation")
+    return load_project_module("pages/1_대피_안내_시뮬레이션.py", "project_dashboard_simulation")
 
 
 @pytest.fixture(scope="session")

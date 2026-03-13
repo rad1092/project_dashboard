@@ -466,7 +466,7 @@ def build_navigation() -> list[st.Page]:
             url_path=PAGE_META["home"]["url_path"],
         ),
         st.Page(
-            base_dir / "pages" / "1_대피_시뮬레이션.py",
+            base_dir / "pages" / "1_대피_안내_시뮬레이션.py",
             title=PAGE_META["simulation"]["label"],
             url_path=PAGE_META["simulation"]["url_path"],
         ),
