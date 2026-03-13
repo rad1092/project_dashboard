@@ -40,7 +40,7 @@ HOME_OVERVIEW_POINTS = [
 
 def configure_page(
     page_title: str,
-    page_icon: str,
+    page_icon: str | None,
     *,
     initial_sidebar_state: str = "expanded",
     set_page_config: bool = True,
@@ -154,7 +154,6 @@ def build_navigation() -> list[st.Page]:
         st.Page(
             render_home_page,
             title=PAGE_META["home"]["label"],
-            icon=PAGE_META["home"]["icon"],
             default=True,
             url_path=PAGE_META["home"]["url_path"],
         ),
