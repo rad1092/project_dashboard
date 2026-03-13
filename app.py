@@ -22,6 +22,7 @@ PAGE_META = {
 }
 
 HOME_HEADLINE = "실시간 대피 안내 대시보드"
+HOME_SUBTITLE = "최신 재난 특보와 지역별 대피소 정보를 한 화면에서 빠르게 확인할 수 있는 통합 랜딩 화면입니다."
 
 ALERT_COLUMNS = ["발표시간", "지역", "시군구", "재난종류", "특보등급", "해당지역"]
 SHELTER_COLUMNS = ["대피소명", "주소", "대피소유형", "위도", "경도", "시도", "시군구", "지역", "수용인원"]
@@ -361,6 +362,7 @@ def _render_home_hero() -> None:
         <div class="home-hero">
             <p class="home-kicker">Disaster Dashboard</p>
             <h1 class="home-title">{HOME_HEADLINE}</h1>
+            <p class="home-copy">{HOME_SUBTITLE}</p>
         </div>
         """,
         unsafe_allow_html=True,

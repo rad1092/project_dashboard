@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 
 class DummyResponse:
@@ -24,6 +25,13 @@ def test_get_browser_or_manual_coordinates_returns_none_for_invalid_values(simul
     state = {"realtime_lat": "north", "realtime_lon": 129.3621}
 
     assert simulation_page_module.get_browser_or_manual_coordinates(state) is None
+
+
+def test_simulation_shelter_info_panel_uses_borderless_container(simulation_page_module) -> None:
+    assert simulation_page_module._get_shelter_info_panel_kwargs() == {
+        "border": False,
+        "height": simulation_page_module.SHOWCASE_PANEL_HEIGHT_PX,
+    }
 
 
 def test_get_osrm_route_detail_normalizes_payload(simulation_page_module, monkeypatch) -> None:
@@ -153,6 +161,12 @@ def test_build_route_bundle_sorts_osrm_routes_and_falls_back(simulation_page_mod
     )
 
     assert ordered["대피소명"].tolist() == ["C 대피소", "A 대피소", "B 대피소"]
+    assert ordered[simulation_page_module.DISPLAY_RANK_COLUMN].tolist() == [1, 2, 3]
+    assert ordered[simulation_page_module.ACCENT_COLOR_COLUMN].tolist() == [
+        "#0f766e",
+        "#1d4ed8",
+        "#f59e0b",
+    ]
     detail_by_key = {detail["destination_key"]: detail for detail in route_details}
     assert detail_by_key["dest-1"]["source"] == "straight_line"
     assert detail_by_key["dest-1"]["route_duration_s"] is None
@@ -190,11 +204,20 @@ def test_build_route_bundle_uses_straight_line_when_osrm_is_missing(simulation_p
     )
 
     assert ordered.iloc[0]["대피소명"] == "북구종합사회복지관"
+    assert ordered.iloc[0][simulation_page_module.DISPLAY_RANK_COLUMN] == 1
+    assert ordered.iloc[0][simulation_page_module.ACCENT_COLOR_COLUMN] == "#0f766e"
     assert route_details[0]["source"] == "straight_line"
     assert warnings == ["OSRM_BASE_URL 설정이 없어 직선 fallback 경로를 표시합니다."]
 
 
-def test_build_realtime_recommendation_map_returns_folium_map(simulation_page_module) -> None:
+@pytest.mark.parametrize(
+    "fixture_name",
+    ["simulation_page_module", "live_guidance_page_module"],
+)
+def test_build_realtime_recommendation_map_uses_row_display_style(request, fixture_name) -> None:
+    page_module = request.getfixturevalue(fixture_name)
+    display_rank_column = page_module.DISPLAY_RANK_COLUMN
+    accent_color_column = page_module.ACCENT_COLOR_COLUMN
     recommendations = pd.DataFrame(
         [
             {
@@ -211,6 +234,8 @@ def test_build_realtime_recommendation_map_returns_folium_map(simulation_page_mo
                 "추천구분": "전용 대피소",
                 "추천사유": "test",
                 "route_key": "dest-0",
+                display_rank_column: 2,
+                accent_color_column: "#f59e0b",
             },
             {
                 "대피소명": "태화체육관",
@@ -226,6 +251,8 @@ def test_build_realtime_recommendation_map_returns_folium_map(simulation_page_mo
                 "추천구분": "기본 대피소",
                 "추천사유": "test",
                 "route_key": "dest-1",
+                display_rank_column: 1,
+                accent_color_column: "#0f766e",
             },
         ]
     )
@@ -246,7 +273,7 @@ def test_build_realtime_recommendation_map_returns_folium_map(simulation_page_mo
         },
     ]
 
-    result = simulation_page_module.build_realtime_recommendation_map(
+    result = page_module.build_realtime_recommendation_map(
         35.64,
         129.36,
         recommendations,
@@ -255,7 +282,18 @@ def test_build_realtime_recommendation_map_returns_folium_map(simulation_page_mo
 
     assert result is not None
     assert hasattr(result, "_children")
-    assert any(child.__class__.__name__ == "PolyLine" for child in result._children.values())
+    circle_markers = [
+        child for child in result._children.values() if child.__class__.__name__ == "CircleMarker"
+    ]
+    polylines = [child for child in result._children.values() if child.__class__.__name__ == "PolyLine"]
+    html = result.get_root().render()
+
+    assert len(circle_markers) == 3
+    assert circle_markers[1].options["color"] == "#f59e0b"
+    assert circle_markers[2].options["color"] == "#0f766e"
+    assert [child.options["color"] for child in polylines] == ["#f59e0b", "#0f766e"]
+    assert "Top 2. 북구종합사회복지관" in html
+    assert "Top 1. 태화체육관" in html
 
 
 def test_simulation_page_module_imports(simulation_page_module) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from html import escape
 import importlib.util
 import math
@@ -81,11 +82,19 @@ CARD_TEXT_PRIMARY = "#e5eef9"
 CARD_TEXT_MUTED = "#94a3b8"
 CARD_DIVIDER = "rgba(148, 163, 184, 0.16)"
 CARD_ROW_BACKGROUND = "rgba(148, 163, 184, 0.04)"
+SHOWCASE_CARD_SCALE = 0.8
+SHOWCASE_CARD_STACK_GAP_REM = 3.70
 SHOWCASE_PANEL_HEIGHT_PX = 710
 SHOWCASE_MAP_HEIGHT_PX = 610
 CRAWLING_MODULE_NAME = "project_dashboard_live_crawling_runtime"
 CRAWLING_MODULE_PATH = Path(__file__).resolve().parents[1] / "preprocessing_code" / "crawling.py"
+MOCK_DISASTER_MODULE_NAME = "project_dashboard_mock_disaster_message_runtime"
+MOCK_DISASTER_MODULE_PATH = (
+    Path(__file__).resolve().parents[1] / "preprocessing_code" / "mock_disaster_message.py"
+)
 DEFAULT_CRAWLING_WAIT_SECONDS = 15
+CRAWLED_ALERT_SOURCE_LIVE = "live"
+CRAWLED_ALERT_SOURCE_MOCK = "mock"
 
 RECOMMENDATION_RESULT_COLUMNS = [
     "대피소명",
@@ -107,84 +116,204 @@ SHELTER_ADDRESS_COLUMN = RECOMMENDATION_RESULT_COLUMNS[1]
 SHELTER_TYPE_COLUMN = RECOMMENDATION_RESULT_COLUMNS[2]
 STRAIGHT_DISTANCE_COLUMN = RECOMMENDATION_RESULT_COLUMNS[9]
 RECOMMENDATION_KIND_COLUMN = RECOMMENDATION_RESULT_COLUMNS[10]
+RECENT_ALERT_DISPLAY_COLUMNS = [
+    PUBLISHED_AT_COLUMN,
+    DISASTER_TYPE_COLUMN,
+    ALERT_LEVEL_COLUMN,
+    SIGUNGU_COLUMN,
+]
+DISPLAY_RANK_COLUMN = "_display_rank"
+ACCENT_COLOR_COLUMN = "_accent_color"
 
 
 def _escape_card_text(value: str) -> str:
     return escape(value).replace("\n", "<br>")
 
 
+def _scaled_rem(value: float) -> str:
+    return f"{value * SHOWCASE_CARD_SCALE:.2f}rem"
+
+
 def build_shelter_summary_card_html(
     title: str,
     rows: Sequence[tuple[str, str]],
+    *,
+    accent_color: str,
     note: str | None = None,
 ) -> str:
-    row_blocks: list[str] = []
+    surface_top = "#fbf7ef"
+    surface_bottom = "#efe5d4"
+    surface_border = "rgba(120, 105, 84, 0.18)"
+    meta_background = "#e7dcc9"
+    meta_border = "rgba(120, 105, 84, 0.14)"
+    text_primary = "#1f2937"
+    text_muted = "#6b6458"
+    divider_color = "rgba(120, 105, 84, 0.14)"
+    family_value = ""
+    meta_rows: list[tuple[str, str]] = []
 
-    for index, (label, value) in enumerate(rows):
-        border_style = "none" if index == 0 else f"1px solid {CARD_DIVIDER}"
-        row_blocks.append(
+    for label, value in rows:
+        if label == "대피소 계열" and not family_value:
+            family_value = str(value).strip()
+            continue
+        meta_rows.append((label, value))
+
+    meta_blocks: list[str] = []
+
+    for index, (label, value) in enumerate(meta_rows):
+        item_style = (
+            "display: flex;"
+            " align-items: center;"
+            f" gap: {_scaled_rem(0.22)};"
+            " min-width: 0;"
+            f" padding: {_scaled_rem(0.26)} {_scaled_rem(0.5)};"
+        )
+        if index > 0:
+            item_style += f" border-left: 1px solid {meta_border};"
+        if label == "주소":
+            item_style += " flex: 1 1 auto;"
+        else:
+            item_style += " flex: 0 0 auto;"
+
+        value_style = (
+            f"color: {text_primary};"
+            f" font-size: {_scaled_rem(0.82)};"
+            " font-weight: 700;"
+            " min-width: 0;"
+            " overflow: hidden;"
+            " text-overflow: ellipsis;"
+            " white-space: nowrap;"
+        )
+
+        meta_blocks.append(
             dedent(
                 f"""\
-<div class="pd-shelter-summary-card__row" style="
-    display: grid;
-    grid-template-columns: minmax(5.75rem, 6.75rem) minmax(0, 1fr);
-    gap: 0.75rem;
-    align-items: start;
-    padding: 0.58rem 0.15rem;
-    border-top: {border_style};
-    line-height: 1.28;
-">
-    <div class="pd-shelter-summary-card__label" style="
-        color: {CARD_TEXT_MUTED};
-        font-size: 0.94rem;
-        font-weight: 600;
+<div class="pd-shelter-summary-card__meta-item" style="{item_style}">
+    <span class="pd-shelter-summary-card__label" style="
+        color: {text_muted};
+        font-size: {_scaled_rem(0.68)};
+        font-weight: 700;
         letter-spacing: -0.01em;
         white-space: nowrap;
-    ">{_escape_card_text(label)}</div>
-    <div class="pd-shelter-summary-card__value" style="
-        color: {CARD_TEXT_PRIMARY};
-        font-size: 1rem;
-        font-weight: 500;
-        line-height: 1.28;
-        padding: 0.02rem 0.65rem 0.02rem 0.02rem;
-        border-radius: 0.6rem;
-        background: {CARD_ROW_BACKGROUND};
-        overflow-wrap: anywhere;
-        word-break: keep-all;
-    ">{_escape_card_text(value)}</div>
+        flex-shrink: 0;
+    ">{_escape_card_text(label)}</span>
+    <span class="pd-shelter-summary-card__value" style="{value_style}">{_escape_card_text(value)}</span>
 </div>"""
             ).strip()
         )
+
+    family_block = ""
+    if family_value:
+        family_block = dedent(
+            f"""\
+<div class="pd-shelter-summary-card__family" style="
+    margin-top: {_scaled_rem(0.26)};
+    display: inline-flex;
+    align-items: center;
+    gap: {_scaled_rem(0.24)};
+    min-width: 0;
+    max-width: 100%;
+    padding: {_scaled_rem(0.18)} {_scaled_rem(0.5)};
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(120, 105, 84, 0.1);
+">
+    <span style="
+        color: {text_muted};
+        font-size: {_scaled_rem(0.64)};
+        font-weight: 700;
+        white-space: nowrap;
+        flex-shrink: 0;
+    ">대피소 계열</span>
+    <span style="
+        color: {text_primary};
+        font-size: {_scaled_rem(0.72)};
+        font-weight: 700;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    ">{_escape_card_text(family_value)}</span>
+</div>"""
+        ).strip()
 
     note_block = ""
     if note:
         note_block = dedent(
             f"""\
 <div class="pd-shelter-summary-card__note" style="
-    margin-top: 0.45rem;
-    padding-top: 0.7rem;
-    border-top: 1px solid {CARD_DIVIDER};
-    color: {CARD_TEXT_MUTED};
-    font-size: 0.84rem;
-    line-height: 1.25;
+    margin-top: {_scaled_rem(0.44)};
+    padding-top: {_scaled_rem(0.48)};
+    border-top: 1px solid {divider_color};
+    color: {text_muted};
+    font-size: {_scaled_rem(0.72)};
+    line-height: 1.3;
 ">{_escape_card_text(note)}</div>"""
         ).strip()
 
     parts = [
-        f'<div class="pd-shelter-summary-card" style="color: {CARD_TEXT_PRIMARY};">',
         dedent(
             f"""\
-<div class="pd-shelter-summary-card__title" style="
-    margin: 0 0 0.75rem 0;
-    color: {CARD_TEXT_PRIMARY};
-    font-size: 1.9rem;
-    font-weight: 700;
-    line-height: 1.1;
-    letter-spacing: -0.02em;
-">{_escape_card_text(title)}</div>"""
+<div class="pd-shelter-summary-card" style="
+    color: {text_primary};
+    margin-bottom: {_scaled_rem(SHOWCASE_CARD_STACK_GAP_REM)};
+    padding: {_scaled_rem(0.74)} {_scaled_rem(0.9)};
+    border-radius: {_scaled_rem(1.1)};
+    border: 1px solid {surface_border};
+    background:
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.65), transparent 32%),
+        linear-gradient(180deg, {surface_top}, {surface_bottom});
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+">"""
         ).strip(),
-        '<div class="pd-shelter-summary-card__rows" style="display: flex; flex-direction: column;">',
-        "\n".join(row_blocks),
+        dedent(
+            f"""\
+<div class="pd-shelter-summary-card__hero" style="
+    display: flex;
+    gap: {_scaled_rem(0.62)};
+    align-items: center;
+">
+    <div class="pd-shelter-summary-card__accent" style="
+        width: {_scaled_rem(2.18)};
+        height: {_scaled_rem(2.18)};
+        flex-shrink: 0;
+        border-radius: 999px;
+        background: {accent_color};
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: 0 0 0 {_scaled_rem(0.2)} rgba(255, 255, 255, 0.03);
+    "></div>
+    <div style="min-width: 0; flex: 1;">
+        <div class="pd-shelter-summary-card__title" style="
+            margin: 0;
+            color: {accent_color};
+            font-size: {_scaled_rem(2.62)};
+            font-weight: 800;
+            line-height: 1.0;
+            letter-spacing: -0.035em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        ">{_escape_card_text(title)}</div>
+        {family_block}
+    </div>
+</div>"""
+        ).strip(),
+        dedent(
+            f"""\
+<div class="pd-shelter-summary-card__meta-bar" style="
+    display: flex;
+    align-items: center;
+    gap: 0;
+    min-width: 0;
+    margin-top: {_scaled_rem(0.7)};
+    padding: {_scaled_rem(0.12)};
+    border-radius: {_scaled_rem(0.74)};
+    border: 1px solid {meta_border};
+    background: {meta_background};
+">"""
+        ).strip(),
+        "\n".join(meta_blocks),
         "</div>",
     ]
     if note_block:
@@ -196,9 +325,23 @@ def build_shelter_summary_card_html(
 def render_shelter_summary_card(
     title: str,
     rows: Sequence[tuple[str, str]],
+    *,
+    accent_color: str,
     note: str | None = None,
 ) -> None:
-    st.markdown(build_shelter_summary_card_html(title=title, rows=rows, note=note), unsafe_allow_html=True)
+    st.markdown(
+        build_shelter_summary_card_html(
+            title=title,
+            rows=rows,
+            accent_color=accent_color,
+            note=note,
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _get_shelter_info_panel_kwargs() -> dict[str, object]:
+    return {"border": False, "height": SHOWCASE_PANEL_HEIGHT_PX}
 
 
 def _maybe_get_secret_data_dir() -> str | None:
@@ -683,25 +826,41 @@ def build_empty_crawled_alerts_dataframe() -> pd.DataFrame:
     return alerts
 
 
-def load_crawling_module():
-    if CRAWLING_MODULE_NAME in sys.modules:
-        return sys.modules[CRAWLING_MODULE_NAME]
+def _load_runtime_module(module_name: str, module_path: Path, *, label: str):
+    if module_name in sys.modules:
+        return sys.modules[module_name]
 
-    if not CRAWLING_MODULE_PATH.exists():
-        raise FileNotFoundError(f"크롤링 모듈이 없다: {CRAWLING_MODULE_PATH}")
+    if not module_path.exists():
+        raise FileNotFoundError(f"{label} 모듈이 없다: {module_path}")
 
-    spec = importlib.util.spec_from_file_location(CRAWLING_MODULE_NAME, CRAWLING_MODULE_PATH)
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load module from {CRAWLING_MODULE_PATH}")
+        raise RuntimeError(f"cannot load module from {module_path}")
 
     module = importlib.util.module_from_spec(spec)
-    sys.modules[CRAWLING_MODULE_NAME] = module
+    sys.modules[module_name] = module
     try:
         spec.loader.exec_module(module)
     except Exception:
-        sys.modules.pop(CRAWLING_MODULE_NAME, None)
+        sys.modules.pop(module_name, None)
         raise
     return module
+
+
+def load_crawling_module():
+    return _load_runtime_module(
+        CRAWLING_MODULE_NAME,
+        CRAWLING_MODULE_PATH,
+        label="크롤링",
+    )
+
+
+def load_mock_disaster_message_module():
+    return _load_runtime_module(
+        MOCK_DISASTER_MODULE_NAME,
+        MOCK_DISASTER_MODULE_PATH,
+        label="모의 재난문자",
+    )
 
 
 def _validate_crawled_columns(dataframe: pd.DataFrame, *, source_name: str) -> None:
@@ -797,6 +956,22 @@ def load_live_crawled_alerts_dataframe_uncached(*, headless: bool = True) -> pd.
     return _prepare_crawled_alerts_dataframe(normalized)
 
 
+def load_mock_crawled_alerts_dataframe_uncached(
+    *,
+    sido: str,
+    sigungu: str,
+    output_path: str | Path | None = None,
+) -> pd.DataFrame:
+    mock_module = load_mock_disaster_message_module()
+    resolved_output_path = output_path if output_path is not None else mock_module.DEFAULT_OUTPUT_PATH
+    mock_module.write_mock_disaster_message_csv(
+        sido=sido,
+        sigungu=sigungu,
+        output_path=resolved_output_path,
+    )
+    return load_crawled_alerts_dataframe_uncached(resolved_output_path)
+
+
 def get_recent_crawled_alerts(
     dataframe: pd.DataFrame,
     sido: str,
@@ -826,6 +1001,216 @@ def select_default_crawled_alert(
 
 def _state_key(name: str) -> str:
     return f"{STATE_PREFIX}_{name}"
+
+
+def _session_key(prefix: str, name: str) -> str:
+    return f"{prefix}_{name}"
+
+
+def format_crawled_alert_source_label(source: object) -> str:
+    if str(source or "") == CRAWLED_ALERT_SOURCE_MOCK:
+        return "모의"
+    return "실시간"
+
+
+def format_published_at_label(value: object) -> str:
+    if value is None or pd.isna(value):
+        return "-"
+    timestamp = pd.Timestamp(value)
+    if pd.isna(timestamp):
+        return "-"
+    return timestamp.strftime("%Y-%m-%d %H:%M")
+
+
+def build_current_alert_summary(
+    selected_alert: Mapping[str, object] | None,
+    *,
+    source: str,
+) -> dict[str, str] | None:
+    if selected_alert is None:
+        return None
+
+    region = str(selected_alert.get(REGION_COLUMN) or "").strip()
+    sigungu = str(selected_alert.get(SIGUNGU_COLUMN) or "").strip()
+    location_label = " ".join(part for part in [region, sigungu] if part).strip() or "-"
+    source_label = format_crawled_alert_source_label(source)
+    source_note = (
+        "현재 화면은 모의 재난문자 기준으로 실행 중입니다."
+        if source == CRAWLED_ALERT_SOURCE_MOCK
+        else "현재 화면은 실시간 재난문자 기준으로 실행 중입니다."
+    )
+    return {
+        "published_at": format_published_at_label(selected_alert.get(PUBLISHED_AT_COLUMN)),
+        "disaster_type": str(selected_alert.get(DISASTER_TYPE_COLUMN) or "-"),
+        "alert_level": str(selected_alert.get(ALERT_LEVEL_COLUMN) or "-"),
+        "location": location_label,
+        "sender": str(selected_alert.get(SENDER_COLUMN) or "-"),
+        "content": str(selected_alert.get(CONTENT_COLUMN) or "-"),
+        "source_label": source_label,
+        "source_note": source_note,
+    }
+
+
+def build_current_alert_summary_card_html(summary: Mapping[str, str]) -> str:
+    strip_items = [
+        ("재난", f"{summary['disaster_type']} / {summary['alert_level']}"),
+        ("적용 지역", summary["location"]),
+        ("발표시각", summary["published_at"]),
+        ("발송기관", summary["sender"]),
+    ]
+    item_blocks = "\n".join(
+        dedent(
+            f"""\
+<div class="pd-current-alert-strip__item" style="
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    min-width: 0;
+    padding: 0.42rem 0.74rem;
+    border-radius: 999px;
+    border: 1px solid rgba(59, 130, 246, 0.14);
+    background: rgba(15, 23, 42, 0.62);
+">
+    <span style="
+        color: {CARD_TEXT_MUTED};
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+    ">{_escape_card_text(label)}</span>
+    <span style="
+        color: {CARD_TEXT_PRIMARY};
+        font-size: 0.9rem;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    ">{_escape_card_text(value)}</span>
+</div>"""
+        ).strip()
+        for label, value in strip_items
+    )
+    return dedent(
+        f"""\
+<style>
+@media (max-width: 900px) {{
+    .pd-current-alert-strip {{
+        flex-wrap: wrap !important;
+        align-items: stretch !important;
+    }}
+    .pd-current-alert-strip__content {{
+        flex-basis: 100% !important;
+        max-width: 100% !important;
+    }}
+}}
+</style>
+<div class="pd-current-alert-strip" style="
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.65rem;
+    min-width: 0;
+    overflow: hidden;
+    margin-top: 0.9rem;
+    padding: 0.9rem 1rem;
+    border-radius: 1rem;
+    border: 1px solid rgba(56, 189, 248, 0.18);
+    background:
+        radial-gradient(circle at top right, rgba(20, 184, 166, 0.14), transparent 28%),
+        linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(15, 23, 42, 0.94));
+    box-shadow: 0 14px 34px rgba(2, 6, 23, 0.2);
+">
+    <div class="pd-current-alert-strip__badge" style="
+        flex-shrink: 0;
+        padding: 0.42rem 0.78rem;
+        border-radius: 999px;
+        background: rgba(14, 165, 233, 0.16);
+        border: 1px solid rgba(56, 189, 248, 0.24);
+        color: #bae6fd;
+        font-size: 0.84rem;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+    ">{_escape_card_text(summary["source_label"])}</div>
+    {item_blocks}
+    <div class="pd-current-alert-strip__item pd-current-alert-strip__content" style="
+        display: inline-flex;
+        align-items: center;
+        gap: 0.42rem;
+        min-width: 0;
+        flex: 1 1 16rem;
+        padding: 0.42rem 0.78rem;
+        border-radius: 0.92rem;
+        border: 1px solid rgba(59, 130, 246, 0.14);
+        background: rgba(15, 23, 42, 0.62);
+    ">
+        <span style="
+            color: {CARD_TEXT_MUTED};
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            white-space: nowrap;
+        ">내용</span>
+        <span style="
+            min-width: 0;
+            color: {CARD_TEXT_PRIMARY};
+            font-size: 0.9rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        ">{_escape_card_text(summary["content"])}</span>
+    </div>
+</div>"""
+    ).strip()
+
+
+def build_recent_alert_display_frame(recent_alerts: pd.DataFrame) -> pd.DataFrame:
+    if recent_alerts.empty:
+        return pd.DataFrame(columns=RECENT_ALERT_DISPLAY_COLUMNS)
+
+    alert_display = recent_alerts.copy()
+    alert_display[PUBLISHED_AT_COLUMN] = alert_display[PUBLISHED_AT_COLUMN].map(format_published_at_label)
+    return alert_display[RECENT_ALERT_DISPLAY_COLUMNS]
+
+
+def get_crawled_alert_source(
+    *,
+    session_state: Mapping[str, object] | None = None,
+    prefix: str = STATE_PREFIX,
+) -> str:
+    state = session_state if session_state is not None else st.session_state
+    source = str(state.get(_session_key(prefix, "live_crawled_alerts_source")) or "")
+    if source == CRAWLED_ALERT_SOURCE_MOCK:
+        return CRAWLED_ALERT_SOURCE_MOCK
+    return CRAWLED_ALERT_SOURCE_LIVE
+
+
+def _get_cached_crawled_alerts(
+    *,
+    session_state: Mapping[str, object] | None = None,
+    prefix: str = STATE_PREFIX,
+) -> pd.DataFrame:
+    state = session_state if session_state is not None else st.session_state
+    cached_alerts = state.get(_session_key(prefix, "live_crawled_alerts"))
+    if isinstance(cached_alerts, pd.DataFrame):
+        return cached_alerts
+    return build_empty_crawled_alerts_dataframe()
+
+
+def _set_crawled_alerts_state(
+    alerts: pd.DataFrame,
+    *,
+    source: str,
+    session_state: MutableMapping[str, object] | None = None,
+    prefix: str = STATE_PREFIX,
+) -> None:
+    state = session_state if session_state is not None else st.session_state
+    state[_session_key(prefix, "live_crawled_alerts")] = alerts
+    state[_session_key(prefix, "live_crawled_alerts_updated_at")] = datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+    state[_session_key(prefix, "live_crawled_alerts_source")] = source
 
 
 def load_prefixed_session_value(
@@ -947,6 +1332,10 @@ def format_location_source_label(source: object) -> str:
     return "기본값"
 
 
+def current_timestamp_label() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
 def apply_browser_location(
     location_payload: object,
     *,
@@ -972,7 +1361,7 @@ def apply_browser_location(
         return
 
     state[f"{prefix}_location_source"] = "browser"
-    state[f"{prefix}_location_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    state[f"{prefix}_location_updated_at"] = current_timestamp_label()
 
 
 def mark_manual_location(
@@ -983,7 +1372,7 @@ def mark_manual_location(
     state = session_state if session_state is not None else st.session_state
     state[f"{prefix}_location_mode"] = "manual"
     state[f"{prefix}_location_source"] = "manual"
-    state[f"{prefix}_location_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    state[f"{prefix}_location_updated_at"] = current_timestamp_label()
 
 
 def sync_default_coordinates(
@@ -1159,7 +1548,10 @@ def build_realtime_recommendation_map(
     for index, (_, row) in enumerate(recommendations.iterrows()):
         route_key = str(row.get("route_key", index))
         detail = detail_by_key.get(route_key)
-        color = RANK_COLORS[index % len(RANK_COLORS)]
+        display_rank = int(row.get(DISPLAY_RANK_COLUMN, index + 1))
+        color = str(
+            row.get(ACCENT_COLOR_COLUMN) or RANK_COLORS[(display_rank - 1) % len(RANK_COLORS)]
+        )
         shelter_latitude = float(row["위도"])
         shelter_longitude = float(row["경도"])
         popup_lines = [
@@ -1178,7 +1570,7 @@ def build_realtime_recommendation_map(
             fill=True,
             fill_color=color,
             fill_opacity=0.95,
-            tooltip=f"Top {index + 1}. {row['대피소명']}",
+            tooltip=f"Top {display_rank}. {row['대피소명']}",
             popup=folium.Popup("<br>".join(popup_lines), max_width=320),
         ).add_to(map_object)
 
@@ -1246,6 +1638,10 @@ def _attach_route_sort(
         ascending=[True, True, True, True],
         na_position="last",
     ).reset_index(drop=True)
+    ordered[DISPLAY_RANK_COLUMN] = ordered.index + 1
+    ordered[ACCENT_COLOR_COLUMN] = [
+        RANK_COLORS[index % len(RANK_COLORS)] for index in range(len(ordered))
+    ]
     return ordered.drop(columns=["route_priority"])
 
 
@@ -1306,10 +1702,6 @@ def build_request_id(
     return f"{selected_token}|{latitude:.6f}|{longitude:.6f}|{routing_signature}|{shelter_tokens}"
 
 
-def _apply_browser_location(location_payload: object) -> None:
-    apply_browser_location(location_payload, prefix=STATE_PREFIX)
-
-
 def _mark_manual_location() -> None:
     mark_manual_location(prefix=STATE_PREFIX)
 
@@ -1318,32 +1710,70 @@ def _sync_default_coordinates(shelters_frame: pd.DataFrame) -> None:
     sync_default_coordinates(shelters_frame, prefix=STATE_PREFIX)
 
 
-def _get_live_crawled_alerts(refresh_requested: bool) -> tuple[pd.DataFrame, str | None]:
-    cache_key = _state_key("live_crawled_alerts")
-    should_reload = refresh_requested or cache_key not in st.session_state
+def _apply_browser_location(location_payload: object) -> None:
+    apply_browser_location(location_payload, prefix=STATE_PREFIX)
+
+
+def _get_runtime_crawled_alerts(
+    *,
+    refresh_requested: bool,
+    mock_requested: bool,
+    active_sido: str,
+    active_sigungu: str,
+    session_state: MutableMapping[str, object] | None = None,
+    prefix: str = STATE_PREFIX,
+    live_loader: Callable[[], pd.DataFrame] = load_live_crawled_alerts_dataframe_uncached,
+    mock_loader: Callable[..., pd.DataFrame] = load_mock_crawled_alerts_dataframe_uncached,
+) -> tuple[pd.DataFrame, str | None]:
+    state = session_state if session_state is not None else st.session_state
+    cache_key = _session_key(prefix, "live_crawled_alerts")
+    updated_key = _session_key(prefix, "live_crawled_alerts_updated_at")
+    source_key = _session_key(prefix, "live_crawled_alerts_source")
+    has_cached_alerts = isinstance(state.get(cache_key), pd.DataFrame)
 
     try:
-        if should_reload:
-            with st.spinner("실시간 재난문자를 확인하는 중..."):
-                alerts = load_prefixed_session_value(
-                    st.session_state,
-                    prefix=STATE_PREFIX,
-                    name="live_crawled_alerts",
-                    loader=load_live_crawled_alerts_dataframe_uncached,
-                    force_refresh=True,
+        if mock_requested:
+            if active_sido not in SUPPORTED_CRAWLED_REGIONS:
+                state.setdefault(updated_key, "-")
+                state.setdefault(source_key, CRAWLED_ALERT_SOURCE_LIVE)
+                return (
+                    _get_cached_crawled_alerts(session_state=state, prefix=prefix),
+                    "모의 재난문자는 지원 권역에서만 생성할 수 있습니다.",
                 )
-        else:
-            alerts = load_prefixed_session_value(
-                st.session_state,
-                prefix=STATE_PREFIX,
-                name="live_crawled_alerts",
-                loader=load_live_crawled_alerts_dataframe_uncached,
+
+            alerts = mock_loader(sido=active_sido, sigungu=active_sigungu)
+            _set_crawled_alerts_state(
+                alerts,
+                source=CRAWLED_ALERT_SOURCE_MOCK,
+                session_state=state,
+                prefix=prefix,
             )
-        return alerts, None
-    except Exception as exc:
-        cached_alerts = st.session_state.get(cache_key)
+            return alerts, None
+
+        if refresh_requested or not has_cached_alerts:
+            alerts = live_loader()
+            _set_crawled_alerts_state(
+                alerts,
+                source=CRAWLED_ALERT_SOURCE_LIVE,
+                session_state=state,
+                prefix=prefix,
+            )
+            return alerts, None
+
+        state.setdefault(updated_key, "-")
+        state.setdefault(source_key, CRAWLED_ALERT_SOURCE_LIVE)
+        cached_alerts = state.get(cache_key)
         if isinstance(cached_alerts, pd.DataFrame):
+            return cached_alerts, None
+        return build_empty_crawled_alerts_dataframe(), None
+    except Exception as exc:
+        cached_alerts = state.get(cache_key)
+        if isinstance(cached_alerts, pd.DataFrame):
+            if mock_requested:
+                return cached_alerts, f"모의 재난문자 생성은 실패했지만 직전 결과를 유지합니다: {exc}"
             return cached_alerts, f"실시간 크롤링 재시도에 실패해 직전 결과를 유지한다: {exc}"
+        if mock_requested:
+            return build_empty_crawled_alerts_dataframe(), f"모의 재난문자를 생성하지 못했다: {exc}"
         return build_empty_crawled_alerts_dataframe(), f"실시간 재난문자 크롤링을 실행하지 못했다: {exc}"
 
 
@@ -1371,81 +1801,117 @@ def _render_live_top3_cards(
         for detail in route_details
         if detail.get("destination_key")
     }
-    for _, row in recommendations.iterrows():
+    for index, (_, row) in enumerate(recommendations.iterrows()):
         detail = detail_by_key.get(str(row.get("route_key", "")), {})
         eta_label = "참고용" if is_tsunami else format_duration_s(detail.get("route_duration_s"))
+        family_label = str(row.get(SHELTER_TYPE_COLUMN) or "").strip() or str(
+            row.get(RECOMMENDATION_KIND_COLUMN) or ""
+        ).strip()
+        accent_color = str(
+            row.get(ACCENT_COLOR_COLUMN) or RANK_COLORS[index % len(RANK_COLORS)]
+        )
         rows = [
-            ("구분", str(row[RECOMMENDATION_KIND_COLUMN])),
+            ("대피소 계열", family_label),
             ("실경로 거리", format_distance_m(detail.get("route_distance_m"))),
-            ("예상 시간", eta_label),
-            ("직선 거리", f"{float(row[STRAIGHT_DISTANCE_COLUMN]):.2f} km"),
             ("주소", str(row[SHELTER_ADDRESS_COLUMN])),
+            ("예상 시간", eta_label),
         ]
         note = (
             "OSRM 경로 확인이 안 돼 직선 fallback 결과를 표시 중입니다."
             if detail.get("source") == "straight_line"
             else None
         )
-        with st.container(border=True):
-            render_shelter_summary_card(str(row[SHELTER_NAME_COLUMN]), rows, note=note)
+        render_shelter_summary_card(
+            str(row[SHELTER_NAME_COLUMN]),
+            rows,
+            accent_color=accent_color,
+            note=note,
+        )
+
+
+def _render_current_alert_summary(
+    selected_alert: Mapping[str, object] | None,
+    *,
+    source: str,
+) -> None:
+    summary = build_current_alert_summary(selected_alert, source=source)
+    if summary is None:
+        return
+    st.markdown(build_current_alert_summary_card_html(summary), unsafe_allow_html=True)
 
 
 def _render_live_detail_expander(
     *,
+    recent_alerts: pd.DataFrame,
     recommendations: pd.DataFrame,
     route_details: list[dict[str, object]],
     tsunami_policy: dict[str, object],
     tsunami_policy_message: str,
 ) -> None:
     with st.expander("상세 데이터", expanded=False):
-        with st.container(border=True):
-            render_section_header("추천 결과 표")
-            if recommendations.empty:
-                st.info("추천 결과가 없습니다.")
-            elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
-                st.warning(tsunami_policy_message)
-                st.info(OFFICIAL_GUIDANCE_MESSAGE)
-            else:
-                detail_by_key = {
-                    str(detail.get("destination_key", "")): detail
-                    for detail in route_details
-                    if detail.get("destination_key")
-                }
-                display_frame = recommendations.copy()
-                display_frame["실경로 거리"] = display_frame["route_key"].map(
-                    lambda key: format_distance_m(
-                        detail_by_key.get(str(key), {}).get("route_distance_m")
+        detail_left, detail_right = st.columns([0.95, 1.05], gap="large")
+
+        with detail_left:
+            with st.container(border=True):
+                render_section_header("최근 재난문자", "현재 감지 지역 기준 최근 5건입니다.")
+                if recent_alerts.empty:
+                    st.info("현재 감지 지역의 최근 재난문자 이력이 없습니다.")
+                else:
+                    st.dataframe(
+                        build_recent_alert_display_frame(recent_alerts),
+                        use_container_width=True,
+                        hide_index=True,
                     )
-                )
-                display_frame["직선 거리"] = display_frame[STRAIGHT_DISTANCE_COLUMN].map(
-                    lambda value: f"{float(value):.2f} km"
-                )
-                columns = [
-                    SHELTER_NAME_COLUMN,
-                    RECOMMENDATION_KIND_COLUMN,
-                    SHELTER_TYPE_COLUMN,
-                    "실경로 거리",
-                    "직선 거리",
-                    SHELTER_ADDRESS_COLUMN,
-                ]
-                if not tsunami_policy["is_tsunami"]:
-                    display_frame["예상 시간"] = display_frame["route_key"].map(
-                        lambda key: format_duration_s(
-                            detail_by_key.get(str(key), {}).get("route_duration_s")
+
+        with detail_right:
+            with st.container(border=True):
+                render_section_header("추천 결과 표")
+                if recommendations.empty:
+                    st.info("추천 결과가 없습니다.")
+                elif tsunami_policy["is_tsunami"] and not tsunami_policy["is_actionable"]:
+                    st.warning(tsunami_policy_message)
+                    st.info(OFFICIAL_GUIDANCE_MESSAGE)
+                else:
+                    detail_by_key = {
+                        str(detail.get("destination_key", "")): detail
+                        for detail in route_details
+                        if detail.get("destination_key")
+                    }
+                    display_frame = recommendations.copy()
+                    display_frame["실경로 거리"] = display_frame["route_key"].map(
+                        lambda key: format_distance_m(
+                            detail_by_key.get(str(key), {}).get("route_distance_m")
                         )
+                    )
+                    display_frame["직선 거리"] = display_frame[STRAIGHT_DISTANCE_COLUMN].map(
+                        lambda value: f"{float(value):.2f} km"
                     )
                     columns = [
                         SHELTER_NAME_COLUMN,
                         RECOMMENDATION_KIND_COLUMN,
                         SHELTER_TYPE_COLUMN,
                         "실경로 거리",
-                        "예상 시간",
                         "직선 거리",
                         SHELTER_ADDRESS_COLUMN,
                     ]
-                st.dataframe(display_frame[columns], use_container_width=True, hide_index=True)
-                if tsunami_policy["is_tsunami"]:
-                    st.info(TSUNAMI_ETA_WARNING_MESSAGE)
+                    if not tsunami_policy["is_tsunami"]:
+                        display_frame["예상 시간"] = display_frame["route_key"].map(
+                            lambda key: format_duration_s(
+                                detail_by_key.get(str(key), {}).get("route_duration_s")
+                            )
+                        )
+                        columns = [
+                            SHELTER_NAME_COLUMN,
+                            RECOMMENDATION_KIND_COLUMN,
+                            SHELTER_TYPE_COLUMN,
+                            "실경로 거리",
+                            "예상 시간",
+                            "직선 거리",
+                            SHELTER_ADDRESS_COLUMN,
+                        ]
+                    st.dataframe(display_frame[columns], use_container_width=True, hide_index=True)
+                    if tsunami_policy["is_tsunami"]:
+                        st.info(TSUNAMI_ETA_WARNING_MESSAGE)
 
 
 def render_page() -> None:
@@ -1475,9 +1941,8 @@ def render_page() -> None:
     st.sidebar.header("안내 설정")
     browser_location_payload: object | None = None
     refresh_requested = st.sidebar.button("재난문자 새로고침", use_container_width=True)
-    crawled_alerts, crawl_error = _get_live_crawled_alerts(refresh_requested)
-    crawl_updated_at = str(st.session_state.get(_state_key("live_crawled_alerts_updated_at"), "-"))
-    st.sidebar.caption(f"최근 갱신: {crawl_updated_at}")
+    mock_requested = st.sidebar.button("모의 재난문자 실행", use_container_width=True)
+    crawl_status_placeholder = st.sidebar.empty()
 
     st.sidebar.markdown("위치 입력 방식")
     st.sidebar.radio(
@@ -1510,12 +1975,11 @@ def render_page() -> None:
                 map_body_placeholder = st.empty()
 
         with top3_column:
-            with st.container(border=True, height=SHOWCASE_PANEL_HEIGHT_PX):
-                render_section_header("대피소 안내")
+            with st.container(**_get_shelter_info_panel_kwargs()):
+                st.subheader("대피소 정보")
+                st.caption("추천 대피소 위치와 정보를 확인합니다.")
                 top3_body_placeholder = st.empty()
-
-    if crawl_error:
-        st.warning(crawl_error)
+    alert_summary_placeholder = st.empty()
 
     if st.session_state[_state_key("location_mode")] == "auto":
         if streamlit_geolocation is None:
@@ -1560,11 +2024,35 @@ def render_page() -> None:
     )
     active_sido = str(detected_region.get("sido") or "울산")
     active_sigungu = str(detected_region.get("sigungu") or "북구")
-    region_supported, _recent_alerts, default_alert = resolve_region_alert_state(
+    needs_live_reload = refresh_requested or _state_key("live_crawled_alerts") not in st.session_state
+    if mock_requested and active_sido in SUPPORTED_CRAWLED_REGIONS:
+        alert_load_context = st.spinner("모의 재난문자를 생성하는 중...")
+    elif needs_live_reload:
+        alert_load_context = st.spinner("실시간 재난문자를 확인하는 중...")
+    else:
+        alert_load_context = nullcontext()
+
+    with alert_load_context:
+        crawled_alerts, crawl_error = _get_runtime_crawled_alerts(
+            refresh_requested=refresh_requested,
+            mock_requested=mock_requested,
+            active_sido=active_sido,
+            active_sigungu=active_sigungu,
+        )
+
+    crawl_updated_at = str(st.session_state.get(_state_key("live_crawled_alerts_updated_at"), "-"))
+    crawl_source = get_crawled_alert_source()
+    crawl_status_placeholder.caption(
+        f"최근 갱신: {crawl_updated_at} · {format_crawled_alert_source_label(crawl_source)}"
+    )
+    region_supported, recent_alerts, default_alert = resolve_region_alert_state(
         crawled_alerts,
         active_sido,
         active_sigungu,
     )
+    pending_warnings: list[str] = []
+    if crawl_error:
+        pending_warnings.append(crawl_error)
 
     selected_alert: dict[str, object] | None = default_alert if region_supported else None
 
@@ -1627,12 +2115,20 @@ def render_page() -> None:
     tsunami_policy_message = str(tsunami_policy.get("message") or "")
 
     with metric_placeholder.container():
-        metric_columns = st.columns(2, gap="medium")
+        current_disaster_label = "-"
+        if selected_alert is not None:
+            current_disaster_label = (
+                f"{selected_alert.get(DISASTER_TYPE_COLUMN, '-')} / "
+                f"{selected_alert.get(ALERT_LEVEL_COLUMN, '-')}"
+            )
+        metric_columns = st.columns(4, gap="medium")
         metric_columns[0].metric(
             "위치 소스",
             format_location_source_label(st.session_state.get(_state_key("location_source"))),
         )
         metric_columns[1].metric("감지 지역", f"{active_sido} {active_sigungu}")
+        metric_columns[2].metric("현재 재난", current_disaster_label)
+        metric_columns[3].metric("대피소", f"{len(recommendations):.0f}" if selected_alert else "-")
 
     with map_body_placeholder.container():
         if not region_supported:
@@ -1666,11 +2162,17 @@ def render_page() -> None:
             if tsunami_policy["is_tsunami"]:
                 st.info(TSUNAMI_ETA_WARNING_MESSAGE)
 
-    if route_warnings:
-        for warning in dict.fromkeys(route_warnings):
+    with alert_summary_placeholder.container():
+        if region_supported and selected_alert is not None:
+            _render_current_alert_summary(selected_alert, source=crawl_source)
+
+    pending_warnings.extend(route_warnings)
+    if pending_warnings:
+        for warning in dict.fromkeys(pending_warnings):
             st.warning(warning)
 
     _render_live_detail_expander(
+        recent_alerts=recent_alerts,
         recommendations=recommendations,
         route_details=route_details,
         tsunami_policy=tsunami_policy,

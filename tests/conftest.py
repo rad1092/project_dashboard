@@ -48,6 +48,14 @@ def live_guidance_page_module():
     return load_project_module("pages/2_실시간_대피_안내.py", "project_dashboard_live_guidance")
 
 
+@pytest.fixture(scope="session")
+def mock_disaster_message_module():
+    return load_project_module(
+        "preprocessing_code/mock_disaster_message.py",
+        "project_dashboard_mock_disaster_message",
+    )
+
+
 @pytest.fixture()
 def sample_preprocessing_dir(tmp_path: Path) -> Path:
     base = tmp_path / "preprocessing_data"

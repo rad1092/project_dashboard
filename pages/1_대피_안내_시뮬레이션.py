@@ -81,6 +81,7 @@ CARD_TEXT_MUTED = "#94a3b8"
 CARD_DIVIDER = "rgba(148, 163, 184, 0.16)"
 CARD_ROW_BACKGROUND = "rgba(148, 163, 184, 0.04)"
 SHOWCASE_CARD_SCALE = 0.8
+SHOWCASE_CARD_STACK_GAP_REM = 3.70
 SHOWCASE_PANEL_HEIGHT_PX = 710
 SHOWCASE_MAP_HEIGHT_PX = 610
 
@@ -105,6 +106,8 @@ SHELTER_TYPE_COLUMN = RECOMMENDATION_RESULT_COLUMNS[2]
 STRAIGHT_DISTANCE_COLUMN = RECOMMENDATION_RESULT_COLUMNS[9]
 RECOMMENDATION_KIND_COLUMN = RECOMMENDATION_RESULT_COLUMNS[10]
 ALERT_DISPLAY_COLUMNS = ALERT_COLUMNS[:5]
+DISPLAY_RANK_COLUMN = "_display_rank"
+ACCENT_COLOR_COLUMN = "_accent_color"
 
 
 def _escape_card_text(value: str) -> str:
@@ -118,75 +121,183 @@ def _scaled_rem(value: float) -> str:
 def build_shelter_summary_card_html(
     title: str,
     rows: Sequence[tuple[str, str]],
+    *,
+    accent_color: str,
     note: str | None = None,
 ) -> str:
-    row_blocks: list[str] = []
+    surface_top = "#fbf7ef"
+    surface_bottom = "#efe5d4"
+    surface_border = "rgba(120, 105, 84, 0.18)"
+    meta_background = "#e7dcc9"
+    meta_border = "rgba(120, 105, 84, 0.14)"
+    text_primary = "#1f2937"
+    text_muted = "#6b6458"
+    divider_color = "rgba(120, 105, 84, 0.14)"
+    family_value = ""
+    meta_rows: list[tuple[str, str]] = []
 
-    for index, (label, value) in enumerate(rows):
-        border_style = "none" if index == 0 else f"1px solid {CARD_DIVIDER}"
-        row_blocks.append(
+    for label, value in rows:
+        if label == "대피소 계열" and not family_value:
+            family_value = str(value).strip()
+            continue
+        meta_rows.append((label, value))
+
+    meta_blocks: list[str] = []
+
+    for index, (label, value) in enumerate(meta_rows):
+        item_style = (
+            "display: flex;"
+            " align-items: center;"
+            f" gap: {_scaled_rem(0.22)};"
+            " min-width: 0;"
+            f" padding: {_scaled_rem(0.26)} {_scaled_rem(0.5)};"
+        )
+        if index > 0:
+            item_style += f" border-left: 1px solid {meta_border};"
+        if label == "주소":
+            item_style += " flex: 1 1 auto;"
+        else:
+            item_style += " flex: 0 0 auto;"
+
+        value_style = (
+            f"color: {text_primary};"
+            f" font-size: {_scaled_rem(0.82)};"
+            " font-weight: 700;"
+            " min-width: 0;"
+            " overflow: hidden;"
+            " text-overflow: ellipsis;"
+            " white-space: nowrap;"
+        )
+
+        meta_blocks.append(
             dedent(
                 f"""\
-<div class="pd-shelter-summary-card__row" style="
-    display: grid;
-    grid-template-columns: minmax({_scaled_rem(5.75)}, {_scaled_rem(6.75)}) minmax(0, 1fr);
-    gap: {_scaled_rem(0.75)};
-    align-items: start;
-    padding: {_scaled_rem(0.58)} {_scaled_rem(0.15)};
-    border-top: {border_style};
-    line-height: 1.28;
-">
-    <div class="pd-shelter-summary-card__label" style="
-        color: {CARD_TEXT_MUTED};
-        font-size: {_scaled_rem(0.94)};
-        font-weight: 600;
+<div class="pd-shelter-summary-card__meta-item" style="{item_style}">
+    <span class="pd-shelter-summary-card__label" style="
+        color: {text_muted};
+        font-size: {_scaled_rem(0.68)};
+        font-weight: 700;
         letter-spacing: -0.01em;
         white-space: nowrap;
-    ">{_escape_card_text(label)}</div>
-    <div class="pd-shelter-summary-card__value" style="
-        color: {CARD_TEXT_PRIMARY};
-        font-size: {_scaled_rem(1.0)};
-        font-weight: 500;
-        line-height: 1.28;
-        padding: {_scaled_rem(0.02)} {_scaled_rem(0.65)} {_scaled_rem(0.02)} {_scaled_rem(0.02)};
-        border-radius: {_scaled_rem(0.6)};
-        background: {CARD_ROW_BACKGROUND};
-        overflow-wrap: anywhere;
-        word-break: keep-all;
-    ">{_escape_card_text(value)}</div>
+        flex-shrink: 0;
+    ">{_escape_card_text(label)}</span>
+    <span class="pd-shelter-summary-card__value" style="{value_style}">{_escape_card_text(value)}</span>
 </div>"""
             ).strip()
         )
+
+    family_block = ""
+    if family_value:
+        family_block = dedent(
+            f"""\
+<div class="pd-shelter-summary-card__family" style="
+    margin-top: {_scaled_rem(0.26)};
+    display: inline-flex;
+    align-items: center;
+    gap: {_scaled_rem(0.24)};
+    min-width: 0;
+    max-width: 100%;
+    padding: {_scaled_rem(0.18)} {_scaled_rem(0.5)};
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(120, 105, 84, 0.1);
+">
+    <span style="
+        color: {text_muted};
+        font-size: {_scaled_rem(0.64)};
+        font-weight: 700;
+        white-space: nowrap;
+        flex-shrink: 0;
+    ">대피소 계열</span>
+    <span style="
+        color: {text_primary};
+        font-size: {_scaled_rem(0.72)};
+        font-weight: 700;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    ">{_escape_card_text(family_value)}</span>
+</div>"""
+        ).strip()
 
     note_block = ""
     if note:
         note_block = dedent(
             f"""\
 <div class="pd-shelter-summary-card__note" style="
-    margin-top: {_scaled_rem(0.45)};
-    padding-top: {_scaled_rem(0.7)};
-    border-top: 1px solid {CARD_DIVIDER};
-    color: {CARD_TEXT_MUTED};
-    font-size: {_scaled_rem(0.84)};
-    line-height: 1.25;
+    margin-top: {_scaled_rem(0.44)};
+    padding-top: {_scaled_rem(0.48)};
+    border-top: 1px solid {divider_color};
+    color: {text_muted};
+    font-size: {_scaled_rem(0.72)};
+    line-height: 1.3;
 ">{_escape_card_text(note)}</div>"""
         ).strip()
 
     parts = [
-        f'<div class="pd-shelter-summary-card" style="color: {CARD_TEXT_PRIMARY};">',
         dedent(
             f"""\
-<div class="pd-shelter-summary-card__title" style="
-    margin: 0 0 {_scaled_rem(0.75)} 0;
-    color: {CARD_TEXT_PRIMARY};
-    font-size: {_scaled_rem(1.9)};
-    font-weight: 700;
-    line-height: 1.1;
-    letter-spacing: -0.02em;
-">{_escape_card_text(title)}</div>"""
+<div class="pd-shelter-summary-card" style="
+    color: {text_primary};
+    margin-bottom: {_scaled_rem(SHOWCASE_CARD_STACK_GAP_REM)};
+    padding: {_scaled_rem(0.74)} {_scaled_rem(0.9)};
+    border-radius: {_scaled_rem(1.1)};
+    border: 1px solid {surface_border};
+    background:
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.65), transparent 32%),
+        linear-gradient(180deg, {surface_top}, {surface_bottom});
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+">"""
         ).strip(),
-        '<div class="pd-shelter-summary-card__rows" style="display: flex; flex-direction: column;">',
-        "\n".join(row_blocks),
+        dedent(
+            f"""\
+<div class="pd-shelter-summary-card__hero" style="
+    display: flex;
+    gap: {_scaled_rem(0.62)};
+    align-items: center;
+">
+    <div class="pd-shelter-summary-card__accent" style="
+        width: {_scaled_rem(2.18)};
+        height: {_scaled_rem(2.18)};
+        flex-shrink: 0;
+        border-radius: 999px;
+        background: {accent_color};
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: 0 0 0 {_scaled_rem(0.2)} rgba(255, 255, 255, 0.03);
+    "></div>
+    <div style="min-width: 0; flex: 1;">
+        <div class="pd-shelter-summary-card__title" style="
+            margin: 0;
+            color: {accent_color};
+            font-size: {_scaled_rem(2.62)};
+            font-weight: 800;
+            line-height: 1.0;
+            letter-spacing: -0.035em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        ">{_escape_card_text(title)}</div>
+        {family_block}
+    </div>
+</div>"""
+        ).strip(),
+        dedent(
+            f"""\
+<div class="pd-shelter-summary-card__meta-bar" style="
+    display: flex;
+    align-items: center;
+    gap: 0;
+    min-width: 0;
+    margin-top: {_scaled_rem(0.7)};
+    padding: {_scaled_rem(0.12)};
+    border-radius: {_scaled_rem(0.74)};
+    border: 1px solid {meta_border};
+    background: {meta_background};
+">"""
+        ).strip(),
+        "\n".join(meta_blocks),
         "</div>",
     ]
     if note_block:
@@ -198,9 +309,23 @@ def build_shelter_summary_card_html(
 def render_shelter_summary_card(
     title: str,
     rows: Sequence[tuple[str, str]],
+    *,
+    accent_color: str,
     note: str | None = None,
 ) -> None:
-    st.markdown(build_shelter_summary_card_html(title=title, rows=rows, note=note), unsafe_allow_html=True)
+    st.markdown(
+        build_shelter_summary_card_html(
+            title=title,
+            rows=rows,
+            accent_color=accent_color,
+            note=note,
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _get_shelter_info_panel_kwargs() -> dict[str, object]:
+    return {"border": False, "height": SHOWCASE_PANEL_HEIGHT_PX}
 
 
 def _maybe_get_secret_data_dir() -> str | None:
@@ -1053,7 +1178,10 @@ def build_realtime_recommendation_map(
     for index, (_, row) in enumerate(recommendations.iterrows()):
         route_key = str(row.get("route_key", index))
         detail = detail_by_key.get(route_key)
-        color = RANK_COLORS[index % len(RANK_COLORS)]
+        display_rank = int(row.get(DISPLAY_RANK_COLUMN, index + 1))
+        color = str(
+            row.get(ACCENT_COLOR_COLUMN) or RANK_COLORS[(display_rank - 1) % len(RANK_COLORS)]
+        )
         shelter_latitude = float(row["위도"])
         shelter_longitude = float(row["경도"])
         popup_lines = [
@@ -1072,7 +1200,7 @@ def build_realtime_recommendation_map(
             fill=True,
             fill_color=color,
             fill_opacity=0.95,
-            tooltip=f"Top {index + 1}. {row['대피소명']}",
+            tooltip=f"Top {display_rank}. {row['대피소명']}",
             popup=folium.Popup("<br>".join(popup_lines), max_width=320),
         ).add_to(map_object)
 
@@ -1140,6 +1268,10 @@ def _attach_route_sort(
         ascending=[True, True, True, True],
         na_position="last",
     ).reset_index(drop=True)
+    ordered[DISPLAY_RANK_COLUMN] = ordered.index + 1
+    ordered[ACCENT_COLOR_COLUMN] = [
+        RANK_COLORS[index % len(RANK_COLORS)] for index in range(len(ordered))
+    ]
     return ordered.drop(columns=["route_priority"])
 
 
@@ -1226,23 +1358,32 @@ def _render_showcase_top3_cards(
         for detail in route_details
         if detail.get("destination_key")
     }
-    for _, row in recommendations.iterrows():
+    for index, (_, row) in enumerate(recommendations.iterrows()):
         detail = detail_by_key.get(str(row.get("route_key", "")), {})
         eta_label = "참고용" if is_tsunami else format_duration_s(detail.get("route_duration_s"))
+        family_label = str(row.get(SHELTER_TYPE_COLUMN) or "").strip() or str(
+            row.get(RECOMMENDATION_KIND_COLUMN) or ""
+        ).strip()
+        accent_color = str(
+            row.get(ACCENT_COLOR_COLUMN) or RANK_COLORS[index % len(RANK_COLORS)]
+        )
         rows = [
-            ("구분", str(row[RECOMMENDATION_KIND_COLUMN])),
+            ("대피소 계열", family_label),
             ("실경로 거리", format_distance_m(detail.get("route_distance_m"))),
-            ("예상 시간", eta_label),
-            ("직선 거리", f"{float(row[STRAIGHT_DISTANCE_COLUMN]):.2f} km"),
             ("주소", str(row[SHELTER_ADDRESS_COLUMN])),
+            ("예상 시간", eta_label),
         ]
         note = (
             "OSRM 경로 확인이 안 돼 직선 fallback 결과를 표시 중입니다."
             if detail.get("source") == "straight_line"
             else None
         )
-        with st.container(border=True):
-            render_shelter_summary_card(str(row[SHELTER_NAME_COLUMN]), rows, note=note)
+        render_shelter_summary_card(
+            str(row[SHELTER_NAME_COLUMN]),
+            rows,
+            accent_color=accent_color,
+            note=note,
+        )
 
 
 def _render_showcase_detail_expander(
@@ -1383,7 +1524,9 @@ def render_page() -> None:
                 map_body_placeholder = st.empty()
 
         with top3_column:
-            with st.container(border=True, height=SHOWCASE_PANEL_HEIGHT_PX):
+            with st.container(**_get_shelter_info_panel_kwargs()):
+                st.subheader("대피소 정보")
+                st.caption("추천 대피소 위치와 정보를 확인합니다.")
                 top3_body_placeholder = st.empty()
 
     if st.session_state["realtime_location_mode"] == "auto":
