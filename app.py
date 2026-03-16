@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from html import escape
 from pathlib import Path
 
 import pandas as pd
@@ -567,8 +568,13 @@ def inject_shared_card_styles() -> None:
             font-family: {HEADING_FONT_FAMILY};
         }}
         div[data-testid="stMetricValue"] > div {{
-            font-size: clamp(1.9rem, 2.15vw, 2.35rem);
+            font-size: clamp(1.78rem, 2vw, 2.18rem);
             line-height: 1.08;
+        }}
+        [data-testid="stMainBlockContainer"]:has(.pd-compact-top-metrics-marker) div[data-testid="stMetric"] {{
+            min-height: 6.4rem;
+            padding-top: 0.96rem;
+            padding-bottom: 0.96rem;
         }}
         div[data-testid="stVerticalBlockBorderWrapper"] {{
             border-radius: 28px;
@@ -640,7 +646,20 @@ def style_plotly_figure(figure: go.Figure) -> go.Figure:
 def _format_latest_period(value: object) -> str:
     if value is None or pd.isna(value):
         return "-"
-    return pd.Timestamp(value).strftime("%Y-%m-%d %H:%M")
+    return pd.Timestamp(value).strftime("%Y-%m-%d")
+
+
+def _render_home_metric_card(label: str, value: str, *, compact_value: bool = False) -> None:
+    value_class_name = "home-metric-value home-metric-value--compact" if compact_value else "home-metric-value"
+    st.markdown(
+        f"""
+        <div class="home-metric-card">
+            <p class="home-metric-label">{escape(label)}</p>
+            <div class="{value_class_name}">{escape(value)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _render_home_hero() -> None:
@@ -659,15 +678,40 @@ def _render_home_hero() -> None:
         [data-testid="stMainBlockContainer"]:has(.home-page-marker) > div {{
             width: 100%;
         }}
-        [data-testid="stMainBlockContainer"]:has(.home-page-marker) div[data-testid="stMetric"] {{
-            min-height: 8.9rem;
-            padding: 1.05rem 1.1rem;
+        .home-kpi-gap {{
+            height: 2.5rem;
         }}
-        [data-testid="stMainBlockContainer"]:has(.home-page-marker) div[data-testid="stMetricLabel"] p {{
+        .home-metric-card {{
+            min-height: 7.1rem;
+            padding: 0.84rem 1.1rem;
+            border-radius: 24px;
+            border: 1px solid {BORDER_ACCENT};
+            background:
+                radial-gradient(circle at top left, rgba(47, 143, 131, 0.16), transparent 34%),
+                radial-gradient(circle at bottom right, rgba(212, 183, 137, 0.16), transparent 30%),
+                linear-gradient(135deg, rgba(255, 250, 242, 0.98), rgba(244, 236, 223, 0.94));
+            box-shadow: 0 18px 48px {SHADOW_SOFT};
+        }}
+        .home-metric-label {{
+            margin: 0 0 0.55rem 0;
+            color: {TEXT_MUTED};
             font-size: 0.95rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
         }}
-        [data-testid="stMainBlockContainer"]:has(.home-page-marker) div[data-testid="stMetricValue"] > div {{
-            font-size: clamp(1.75rem, 1.95vw, 2.15rem);
+        .home-metric-value {{
+            color: {TEXT_PRIMARY};
+            font-family: {HEADING_FONT_FAMILY};
+            font-size: clamp(1.62rem, 1.82vw, 1.98rem);
+            line-height: 1.12;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
+        }}
+        .home-metric-value--compact {{
+            font-family: {HEADING_FONT_FAMILY};
+            font-size: clamp(1.54rem, 1.74vw, 1.9rem);
+            line-height: 1.12;
+            text-wrap: pretty;
         }}
         .home-hero {{
             padding: clamp(2.4rem, 4vw, 3.1rem) clamp(1.7rem, 3vw, 2.8rem);
@@ -710,7 +754,10 @@ def _render_home_hero() -> None:
                 padding-bottom: 0.6rem;
                 justify-content: flex-start;
             }}
-            [data-testid="stMainBlockContainer"]:has(.home-page-marker) div[data-testid="stMetric"] {{
+            .home-kpi-gap {{
+                height: 1.5rem;
+            }}
+            .home-metric-card {{
                 min-height: auto;
             }}
             .home-hero {{
@@ -760,10 +807,14 @@ def render_home_page() -> None:
     _, center, _ = st.columns([0.45, 6.1, 0.45], gap="small")
     with center:
         _render_home_hero()
+        st.markdown('<div class="home-kpi-gap"></div>', unsafe_allow_html=True)
         metric_columns = st.columns(3, gap="medium")
-        metric_columns[0].metric("전체 대피소", f"{float(total_shelters):,.0f}")
-        metric_columns[1].metric("특보 집계 지역 수", f"{float(kpis['region_count']):,.0f}")
-        metric_columns[2].metric("최신 특보 시각", latest_period)
+        with metric_columns[0]:
+            _render_home_metric_card("영남권 대피소", f"{float(total_shelters):,.0f}")
+        with metric_columns[1]:
+            _render_home_metric_card("특보 집계 지역", "영남권(5개권역)", compact_value=True)
+        with metric_columns[2]:
+            _render_home_metric_card("최신 특보", latest_period)
 
 
 def build_navigation() -> list[st.Page]:

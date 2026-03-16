@@ -104,6 +104,7 @@ ALERT_STRIP_BADGE_BG = "rgba(47, 143, 131, 0.14)"
 ALERT_STRIP_BADGE_BORDER = "rgba(47, 143, 131, 0.18)"
 ALERT_STRIP_BADGE_TEXT = "#1f6f68"
 SHOWCASE_CARD_SCALE = 0.76
+CARD_VERTICAL_DENSITY = 0.8
 SHOWCASE_CARD_STACK_GAP_REM = 3.10
 SHOWCASE_PANEL_HEIGHT_PX = 680
 SHOWCASE_MAP_HEIGHT_PX = 570
@@ -155,6 +156,10 @@ def _scaled_rem(value: float) -> str:
     return f"{value * SHOWCASE_CARD_SCALE:.2f}rem"
 
 
+def _scaled_vertical_rem(value: float) -> str:
+    return f"{value * SHOWCASE_CARD_SCALE * CARD_VERTICAL_DENSITY:.2f}rem"
+
+
 def _mix_hex_color(color: str, target: str, target_weight: float) -> str:
     source = color.strip().lstrip("#")
     destination = target.strip().lstrip("#")
@@ -203,8 +208,8 @@ def build_shelter_summary_card_html(
     text_muted = CARD_TEXT_MUTED
     divider_color = CARD_DIVIDER
     meta_text_font_size = f"calc({_scaled_rem(0.74)} + 2px)"
-    meta_row_min_height = _scaled_rem(1.34)
-    note_slot_min_height = _scaled_rem(1.72)
+    meta_row_min_height = _scaled_vertical_rem(1.34)
+    note_slot_min_height = _scaled_vertical_rem(1.72)
     family_value = ""
     meta_rows: list[tuple[str, str]] = []
 
@@ -225,7 +230,7 @@ def build_shelter_summary_card_html(
             f" min-height: {meta_row_min_height};"
             " box-sizing: border-box;"
             " align-self: stretch;"
-            f" padding: {_scaled_rem(0.26)} {_scaled_rem(0.5)};"
+            f" padding: {_scaled_vertical_rem(0.26)} {_scaled_rem(0.5)};"
         )
         if index > 0:
             item_style += f" border-left: 1px solid {meta_border};"
@@ -268,7 +273,7 @@ def build_shelter_summary_card_html(
         family_block = dedent(
             f"""\
 <div style="
-    margin-top: {_scaled_rem(0.26)};
+    margin-top: {_scaled_vertical_rem(0.2)};
     display: flex;
     justify-content: flex-end;
     min-width: 0;
@@ -281,7 +286,7 @@ def build_shelter_summary_card_html(
     max-width: 100%;
     min-height: {meta_row_min_height};
     box-sizing: border-box;
-    padding: {_scaled_rem(0.18)} {_scaled_rem(0.5)};
+    padding: {_scaled_vertical_rem(0.16)} {_scaled_rem(0.5)};
     border-radius: 999px;
     background: {CARD_FAMILY_BACKGROUND};
     border: 1px solid {meta_border};
@@ -314,9 +319,9 @@ def build_shelter_summary_card_html(
     note_block = dedent(
         f"""\
 <div class="pd-shelter-summary-card__note" style="
-    margin-top: {_scaled_rem(0.44)};
+    margin-top: {_scaled_vertical_rem(0.32)};
     min-height: {note_slot_min_height};
-    padding-top: {_scaled_rem(0.48)};
+    padding-top: {_scaled_vertical_rem(0.34)};
     border-top: {note_border};
     color: {text_muted};
     font-size: {_scaled_rem(0.72)};
@@ -330,10 +335,10 @@ def build_shelter_summary_card_html(
             f"""\
 <div class="pd-shelter-summary-card" style="
     color: {text_primary};
-    margin-bottom: {_scaled_rem(SHOWCASE_CARD_STACK_GAP_REM)};
+    margin-bottom: {_scaled_vertical_rem(SHOWCASE_CARD_STACK_GAP_REM)};
     display: flex;
     flex-direction: column;
-    padding: {_scaled_rem(0.74)} {_scaled_rem(0.9)};
+    padding: {_scaled_vertical_rem(0.58)} {_scaled_rem(0.9)};
     border-radius: {_scaled_rem(1.1)};
     border: 2px solid {surface_border};
     background:
@@ -355,7 +360,7 @@ def build_shelter_summary_card_html(
         <div class="pd-shelter-summary-card__title" style="
             margin: 0;
             color: {CARD_TEXT_PRIMARY};
-            font-size: {_scaled_rem(2.62)};
+            font-size: {_scaled_rem(2.34)};
             font-family: {HEADING_FONT_FAMILY};
             font-weight: 700;
             line-height: 1.0;
@@ -375,8 +380,8 @@ def build_shelter_summary_card_html(
     align-items: stretch;
     gap: 0;
     min-width: 0;
-    margin-top: {_scaled_rem(0.7)};
-    padding: {_scaled_rem(0.12)};
+    margin-top: {_scaled_vertical_rem(0.48)};
+    padding: {_scaled_vertical_rem(0.1)};
     border-radius: {_scaled_rem(0.74)};
     border: 1px solid {meta_border};
     background: {meta_background};
@@ -1264,7 +1269,7 @@ def _set_crawled_alerts_state(
     state = session_state if session_state is not None else st.session_state
     state[_session_key(prefix, "live_crawled_alerts")] = alerts
     state[_session_key(prefix, "live_crawled_alerts_updated_at")] = datetime.now().strftime(
-        "%Y-%m-%d %H:%M:%S"
+        "%Y-%m-%d %H:%M"
     )
     state[_session_key(prefix, "live_crawled_alerts_source")] = source
 
@@ -1281,7 +1286,7 @@ def load_prefixed_session_value(
     updated_key = f"{prefix}_{name}_updated_at"
     if force_refresh or value_key not in session_state:
         session_state[value_key] = loader()
-        session_state[updated_key] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        session_state[updated_key] = datetime.now().strftime("%Y-%m-%d %H:%M")
     session_state.setdefault(updated_key, "-")
     return session_state[value_key]
 
@@ -1389,7 +1394,7 @@ def format_location_source_label(source: object) -> str:
 
 
 def current_timestamp_label() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
 def apply_browser_location(
@@ -1978,6 +1983,7 @@ def render_page() -> None:
     )
 
     render_page_title(PAGE_LABEL)
+    st.markdown('<div class="pd-compact-top-metrics-marker"></div>', unsafe_allow_html=True)
 
     try:
         shelters_frame = load_shelters_dataframe()
