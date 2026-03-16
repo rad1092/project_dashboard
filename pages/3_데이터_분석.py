@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from html import escape
 from pathlib import Path
 
@@ -15,15 +16,18 @@ from app import (
     APP_ICON,
     APP_TITLE,
     BORDER_SOFT,
+    DATASET_FILE_MAP,
+    SHELTER_COLUMNS,
     TEXT_MUTED,
     TEXT_PRIMARY,
+    _prepare_alerts,
+    _prepare_shelters,
+    _read_csv,
     build_kpis,
     configure_page,
-    load_analysis_dataset,
-    load_shelters_dataframe,
-    load_shelters_dataframe_uncached,
     render_page_title,
     render_section_header,
+    resolve_data_dir,
     style_plotly_figure,
 )
 
@@ -81,6 +85,131 @@ def load_map_html(path_value: str) -> str:
     raise UnicodeDecodeError("unknown", b"", 0, 1, f"Unable to decode {path}")
 
 
+def _get_repo_default_db_dir() -> Path:
+    return Path(__file__).resolve().parents[1] / "preprocessing_code" / "data"
+
+
+def _find_db_in_directory(directory: Path) -> Path | None:
+    if not directory.exists() or not directory.is_dir():
+        return None
+
+    for preferred_name in ("Emergency_shelter.db", "Emergency_Shelter.db"):
+        preferred_path = directory / preferred_name
+        if preferred_path.exists():
+            return preferred_path
+
+    matches = sorted(directory.glob("*.db"))
+    if matches:
+        return matches[0]
+    return None
+
+
+def resolve_disaster_db_path(path_override: str | Path | None = None) -> Path | None:
+    candidate_roots = [Path(path_override)] if path_override is not None else [_get_repo_default_db_dir()]
+
+    for candidate in candidate_roots:
+        resolved = candidate.expanduser().resolve()
+        if resolved.is_file() and resolved.suffix.lower() == ".db":
+            return resolved
+
+        for directory in (
+            resolved / "preprocessing_code" / "data",
+            resolved.parent / "preprocessing_code" / "data",
+            resolved / "data",
+            resolved,
+        ):
+            database_path = _find_db_in_directory(directory)
+            if database_path is not None:
+                return database_path.resolve()
+
+    return None
+
+
+def _load_alerts_dataframe_from_db(path_override: str | Path | None = None) -> pd.DataFrame | None:
+    database_path = resolve_disaster_db_path(path_override)
+    if database_path is None:
+        return None
+
+    query = """
+        SELECT
+            da.발표시간,
+            r.시도 AS 지역,
+            r.시군구,
+            dt.재난이름 AS 재난종류,
+            da.특보등급,
+            da.해당지역
+        FROM danger_alerts AS da
+        LEFT JOIN regions AS r ON da.지역_id = r.지역_id
+        LEFT JOIN disaster_types AS dt ON da.재난유형_id = dt.재난유형_id
+    """
+    with sqlite3.connect(database_path) as connection:
+        alerts = pd.read_sql_query(query, connection)
+
+    return _prepare_alerts(alerts.loc[:, ANALYSIS_COLUMNS])
+
+
+def _load_shelters_dataframe_from_db(path_override: str | Path | None = None) -> pd.DataFrame | None:
+    database_path = resolve_disaster_db_path(path_override)
+    if database_path is None:
+        return None
+
+    query = """
+        SELECT
+            s.대피소명,
+            s.주소,
+            s.대피소유형,
+            s.위도,
+            s.경도,
+            r.시도,
+            r.시군구,
+            COALESCE(s.지역설명, r.시도) AS 지역,
+            s.수용인원
+        FROM shelters AS s
+        LEFT JOIN regions AS r ON s.지역_id = r.지역_id
+    """
+    with sqlite3.connect(database_path) as connection:
+        shelters = pd.read_sql_query(query, connection)
+
+    return _prepare_shelters(shelters.loc[:, SHELTER_COLUMNS])
+
+
+def load_alerts_dataframe_uncached(path_override: str | Path | None = None) -> pd.DataFrame:
+    db_frame = _load_alerts_dataframe_from_db(path_override)
+    if db_frame is not None:
+        return db_frame
+
+    data_dir = resolve_data_dir(path_override)
+    return _prepare_alerts(_read_csv(data_dir / DATASET_FILE_MAP["alerts"]))
+
+
+@st.cache_data(show_spinner=False)
+def load_alerts_dataframe(path_override: str | None = None) -> pd.DataFrame:
+    return load_alerts_dataframe_uncached(path_override)
+
+
+def load_shelters_dataframe_uncached(path_override: str | Path | None = None) -> pd.DataFrame:
+    db_frame = _load_shelters_dataframe_from_db(path_override)
+    if db_frame is not None:
+        return db_frame
+
+    data_dir = resolve_data_dir(path_override)
+    return _prepare_shelters(_read_csv(data_dir / DATASET_FILE_MAP["shelters"]))
+
+
+@st.cache_data(show_spinner=False)
+def load_shelters_dataframe(path_override: str | None = None) -> pd.DataFrame:
+    return load_shelters_dataframe_uncached(path_override)
+
+
+def load_analysis_dataset(data_dir: str | Path | None = None) -> pd.DataFrame:
+    if data_dir is None:
+        alerts = load_alerts_dataframe()
+    else:
+        alerts = load_alerts_dataframe_uncached(data_dir)
+
+    return alerts.loc[:, ANALYSIS_COLUMNS].copy().reset_index(drop=True)
+
+
 def _get_color_map(values: list[str]) -> dict[str, str]:
     color_map: dict[str, str] = {}
     for index, value in enumerate(values):
@@ -120,40 +249,6 @@ def filter_analysis_dataset(
         & dataframe["재난종류"].isin(selected_disasters)
         & dataframe["특보등급"].isin(selected_grades)
     ].copy()
-
-
-def build_top_regions_by_disaster_chart(dataframe: pd.DataFrame) -> go.Figure:
-    if dataframe.empty:
-        return _build_empty_figure("선택한 조건에 맞는 재난 분포가 없습니다.")
-
-    summary = (
-        dataframe.groupby(["재난종류", "시군구"], as_index=False)
-        .size()
-        .rename(columns={"size": "발생건수"})
-        .sort_values(["재난종류", "발생건수"], ascending=[True, False])
-    )
-    top_regions = summary.groupby("재난종류", group_keys=False).head(3)
-    if top_regions.empty:
-        return _build_empty_figure("재난종류별 상위 지역을 계산할 수 없습니다.")
-
-    disaster_order = top_regions["재난종류"].drop_duplicates().tolist()
-    rows = max(1, (len(disaster_order) + 3) // 4)
-    figure = px.bar(
-        top_regions,
-        x="시군구",
-        y="발생건수",
-        color="재난종류",
-        facet_col="재난종류",
-        facet_col_wrap=4,
-        text_auto=True,
-        title="재난종류별 특보 발생 상위 지역",
-        color_discrete_map=_get_color_map(disaster_order),
-    )
-    figure.for_each_annotation(lambda annotation: annotation.update(text=annotation.text.split("=")[-1]))
-    figure.update_layout(showlegend=False, height=420 + ((rows - 1) * 180))
-    figure.update_xaxes(title="")
-    figure.update_yaxes(title="발생건수")
-    return style_plotly_figure(figure)
 
 
 def build_grade_distribution_chart(dataframe: pd.DataFrame) -> go.Figure:
@@ -238,30 +333,6 @@ def build_grade_distribution_chart(dataframe: pd.DataFrame) -> go.Figure:
     return style_plotly_figure(figure)
 
 
-def build_daily_disaster_trend_chart(dataframe: pd.DataFrame) -> go.Figure:
-    if dataframe.empty:
-        return _build_empty_figure("선택한 조건에 맞는 날짜별 특보 추이가 없습니다.")
-
-    summary = (
-        dataframe.assign(날짜=dataframe["발표시간"].dt.strftime("%Y-%m-%d"))
-        .groupby(["날짜", "재난종류"], as_index=False)
-        .size()
-        .rename(columns={"size": "발생건수"})
-    )
-    figure = px.line(
-        summary,
-        x="날짜",
-        y="발생건수",
-        color="재난종류",
-        markers=True,
-        title="재난종류별 특보 발생 날짜 추이",
-        color_discrete_map=_get_color_map(summary["재난종류"].drop_duplicates().tolist()),
-    )
-    figure.update_xaxes(title="")
-    figure.update_yaxes(title="발생건수")
-    return style_plotly_figure(figure)
-
-
 def build_monthly_distribution_chart(dataframe: pd.DataFrame) -> go.Figure:
     if dataframe.empty:
         return _build_empty_figure("선택한 조건에 맞는 월별 재난 분포가 없습니다.")
@@ -324,33 +395,154 @@ def build_region_disaster_counts_chart(dataframe: pd.DataFrame) -> go.Figure:
     return style_plotly_figure(figure)
 
 
-def build_region_disaster_ratio_heatmap(dataframe: pd.DataFrame) -> go.Figure:
+def build_region_disaster_profile_radar_chart(dataframe: pd.DataFrame) -> go.Figure:
     if dataframe.empty:
-        return _build_empty_figure("선택한 조건에 맞는 지역별 재난 비율이 없습니다.")
+        return _build_empty_figure("선택한 조건에 맞는 지역별 재난 특성 비교가 없습니다.")
 
-    counts = pd.pivot_table(
-        dataframe,
-        index="지역",
-        columns="재난종류",
-        values="발표시간",
-        aggfunc="count",
-        fill_value=0,
+    summary = (
+        dataframe.groupby(["지역", "재난종류"], as_index=False)
+        .size()
+        .rename(columns={"size": "발생건수"})
     )
-    if counts.empty:
+    radar_frame = summary.pivot(index="지역", columns="재난종류", values="발생건수").fillna(0)
+    if radar_frame.empty:
+        return _build_empty_figure("레이더 차트를 그릴 수 있는 데이터가 없습니다.")
+
+    figure = go.Figure()
+    region_colors = {
+        region: COLOR_SEQUENCE[index % len(COLOR_SEQUENCE)]
+        for index, region in enumerate(radar_frame.index.tolist())
+    }
+    for region in radar_frame.index:
+        figure.add_trace(
+            go.Scatterpolar(
+                r=radar_frame.loc[region].tolist(),
+                theta=radar_frame.columns.tolist(),
+                fill="toself",
+                name=region,
+                opacity=0.42,
+                line=dict(color=region_colors[region], width=2),
+                hovertemplate="지역: %{fullData.name}<br>재난종류: %{theta}<br>발생건수: %{r}<extra></extra>",
+            )
+        )
+
+    figure = style_plotly_figure(figure)
+    figure.update_layout(
+        title="지역별 재난 특성 비교",
+        height=520,
+        showlegend=True,
+        legend=dict(
+            title="지역",
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02,
+        ),
+        margin=dict(t=70, b=30, l=30, r=150),
+        polar=dict(
+            bgcolor="rgba(255, 250, 242, 0.82)",
+            radialaxis=dict(
+                visible=True,
+                gridcolor="rgba(111, 116, 104, 0.16)",
+                linecolor="rgba(111, 116, 104, 0.22)",
+                tickfont=dict(color=TEXT_MUTED),
+            ),
+            angularaxis=dict(
+                gridcolor="rgba(111, 116, 104, 0.12)",
+                linecolor="rgba(111, 116, 104, 0.18)",
+                tickfont=dict(color=TEXT_MUTED),
+            ),
+        ),
+    )
+    return figure
+
+
+def build_monthly_disaster_pattern_heatmap_chart(dataframe: pd.DataFrame) -> go.Figure:
+    if dataframe.empty:
+        return _build_empty_figure("선택한 조건에 맞는 월별 재난 패턴이 없습니다.")
+
+    summary = (
+        dataframe.assign(년월=dataframe["발표시간"].dt.to_period("M").astype(str))
+        .groupby(["재난종류", "년월"], as_index=False)
+        .size()
+        .rename(columns={"size": "발생건수"})
+    )
+    heatmap_frame = (
+        summary.pivot(index="재난종류", columns="년월", values="발생건수")
+        .fillna(0)
+        .sort_index(axis=1)
+    )
+    if heatmap_frame.empty:
         return _build_empty_figure("히트맵을 그릴 수 있는 데이터가 없습니다.")
 
-    ratios = counts.div(counts.sum(axis=1), axis=0).mul(100).round(1)
-    figure = px.imshow(
-        ratios,
-        text_auto=".1f",
-        aspect="auto",
-        color_continuous_scale="YlOrRd",
-        title="시도별 재난종류 비율",
+    text_values = heatmap_frame.apply(
+        lambda column: column.map(lambda value: f"{int(value)}" if value >= 10 else "")
     )
-    figure.update_layout(coloraxis_colorbar=dict(title="비율(%)"))
-    figure.update_xaxes(title="재난종류", side="top")
-    figure.update_yaxes(title="지역")
-    return style_plotly_figure(figure)
+    figure = px.imshow(
+        heatmap_frame,
+        color_continuous_scale="YlOrRd",
+        aspect="auto",
+        title="재난종류별 월별 특보 발생 패턴",
+    )
+    figure.update_traces(
+        text=text_values.values,
+        texttemplate="%{text}",
+        textfont={"size": 11, "color": "black"},
+        hovertemplate="재난종류: %{y}<br>년월: %{x}<br>발생건수: %{z}<extra></extra>",
+    )
+    figure = style_plotly_figure(figure)
+    figure.update_layout(
+        height=500,
+        margin=dict(t=70, b=60, l=40, r=40),
+        coloraxis_colorbar=dict(title="발생건수"),
+    )
+    figure.update_xaxes(title="년월", tickangle=0)
+    figure.update_yaxes(title="재난종류")
+    return figure
+
+
+def build_disaster_region_scatter_chart(dataframe: pd.DataFrame) -> go.Figure:
+    if dataframe.empty:
+        return _build_empty_figure("선택한 조건에 맞는 재난종류별 특보 발생 지역이 없습니다.")
+
+    summary = (
+        dataframe[["재난종류", "시군구"]]
+        .dropna()
+        .groupby(["재난종류", "시군구"], as_index=False)
+        .size()
+        .rename(columns={"size": "발생건수"})
+        .sort_values(["재난종류", "발생건수"], ascending=[True, False])
+    )
+    if summary.empty:
+        return _build_empty_figure("버블 차트를 그릴 수 있는 데이터가 없습니다.")
+
+    disaster_order = summary.groupby("재난종류")["발생건수"].sum().sort_values(ascending=False).index.tolist()
+    county_order = summary.groupby("시군구")["발생건수"].sum().sort_values().index.tolist()
+    figure = px.scatter(
+        summary,
+        x="재난종류",
+        y="시군구",
+        size="발생건수",
+        color="시군구",
+        title="재난종류별 특보 발생 지역",
+        category_orders={"재난종류": disaster_order, "시군구": county_order},
+        custom_data=["발생건수"],
+        color_discrete_sequence=px.colors.qualitative.Set2,
+        size_max=24,
+    )
+    figure.update_traces(
+        marker=dict(opacity=0.74, line=dict(width=1, color=BORDER_SOFT)),
+        hovertemplate="재난종류: %{x}<br>시군구: %{y}<br>발생건수: %{customdata[0]}<extra></extra>",
+    )
+    figure = style_plotly_figure(figure)
+    figure.update_layout(
+        height=min(900, max(460, (summary["시군구"].nunique() * 16) + 180)),
+        showlegend=False,
+    )
+    figure.update_xaxes(title="")
+    figure.update_yaxes(title="")
+    return figure
 
 
 def summarize_shelters_by_region(dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -423,43 +615,6 @@ def build_shelter_type_distribution_chart(dataframe: pd.DataFrame) -> go.Figure:
     return style_plotly_figure(figure)
 
 
-def build_region_disaster_vs_shelter_chart(
-    alerts_frame: pd.DataFrame,
-    shelters_frame: pd.DataFrame,
-) -> go.Figure:
-    if alerts_frame.empty:
-        return _build_empty_figure("선택한 조건에 맞는 재난 발생과 대피소 비교가 없습니다.")
-
-    alert_summary = (
-        alerts_frame.groupby("지역", as_index=False)
-        .size()
-        .rename(columns={"size": "재난발생횟수"})
-    )
-    shelter_summary = summarize_shelters_by_region(shelters_frame)[["지역", "대피소_합계"]]
-    summary = (
-        alert_summary.merge(shelter_summary, on="지역", how="left")
-        .fillna({"대피소_합계": 0})
-        .sort_values("재난발생횟수", ascending=False)
-    )
-    figure = px.scatter(
-        summary,
-        x="재난발생횟수",
-        y="대피소_합계",
-        text="지역",
-        size="재난발생횟수",
-        color="지역",
-        title="지역별 재난 발생 횟수와 대피소 수 비교",
-        color_discrete_sequence=COLOR_SEQUENCE,
-    )
-    figure.update_traces(
-        textposition="top center",
-        marker=dict(line=dict(width=1, color=BORDER_SOFT)),
-    )
-    figure.update_xaxes(title="재난 발생 횟수")
-    figure.update_yaxes(title="대피소 수")
-    return style_plotly_figure(figure)
-
-
 def render_page() -> None:
     configure_page(
         page_title=f"{APP_TITLE} | {PAGE_LABEL}",
@@ -526,10 +681,18 @@ def render_page() -> None:
             with legend_col:
                 st.markdown(build_disaster_legend_html(filtered_alerts), unsafe_allow_html=True)
 
+        with st.container(border=True):
+            render_section_header("지역별 재난 특성 비교", "선택한 지역들의 재난 발생 구성을 레이더 차트로 비교합니다.")
+            st.plotly_chart(build_region_disaster_profile_radar_chart(filtered_alerts), use_container_width=True)
+
     with tabs[1]:
         with st.container(border=True):
             render_section_header("월별 재난 분포", "월 단위 누적 분포로 재난 발생 패턴을 봅니다.")
             st.plotly_chart(build_monthly_distribution_chart(filtered_alerts), use_container_width=True)
+
+        with st.container(border=True):
+            render_section_header("재난종류별 월별 특보 발생 패턴", "월별 집중 구간을 히트맵으로 확인합니다.")
+            st.plotly_chart(build_monthly_disaster_pattern_heatmap_chart(filtered_alerts), use_container_width=True)
 
     with tabs[2]:
         advisory_col, warning_col, shelter_col = st.columns(3, gap="large")
@@ -551,6 +714,10 @@ def render_page() -> None:
             with st.container(border=True):
                 render_section_header("지역별 대피소 분포", "선택한 지역의 대피소 구성을 유형별로 합산해 보여줍니다.")
                 st.plotly_chart(build_shelter_type_distribution_chart(filtered_shelters), use_container_width=True)
+
+        with st.container(border=True):
+            render_section_header("재난종류별 특보 발생 지역", "재난종류와 시군구 조합을 버블 차트로 비교합니다.")
+            st.plotly_chart(build_disaster_region_scatter_chart(filtered_alerts), use_container_width=True)
 
     with tabs[3]:
         if not MAP_FILE.exists():
