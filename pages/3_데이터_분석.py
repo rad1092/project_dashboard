@@ -631,17 +631,6 @@ def build_shelter_type_distribution_chart(dataframe: pd.DataFrame) -> go.Figure:
         customdata=summary["대피소_합계"],
         hovertemplate="지역: %{x}<br>한파쉼터: %{y}<br>총 대피소 수: %{customdata}<extra></extra>",
     )
-    figure.add_trace(
-        go.Scatter(
-            x=summary["지역"],
-            y=summary["대피소_합계"],
-            mode="text",
-            text=summary["대피소_합계"],
-            textposition="top center",
-            showlegend=False,
-            hoverinfo="skip",
-        )
-    )
     figure.update_layout(
         barmode="stack",
         title="지역별 대피소 분포",
