@@ -54,6 +54,14 @@ DISASTER_COLOR_MAP = {
     "건조": "#b45309",
     "폭풍해일": "#0f766e",
 }
+(
+    ALERT_TIME_COLUMN,
+    ALERT_REGION_COLUMN,
+    ALERT_SIGUNGU_COLUMN,
+    ALERT_DISASTER_COLUMN,
+    ALERT_GRADE_COLUMN,
+    ALERT_AFFECTED_COLUMN,
+) = ANALYSIS_COLUMNS
 
 
 def _build_empty_figure(message: str) -> go.Figure:
@@ -251,12 +259,36 @@ def filter_analysis_dataset(
     ].copy()
 
 
+def _deduplicate_alert_events(
+    dataframe: pd.DataFrame,
+    *,
+    include_region: bool = False,
+    include_sigungu: bool = False,
+) -> pd.DataFrame:
+    if dataframe.empty:
+        return dataframe.copy()
+
+    subset = [
+        ALERT_TIME_COLUMN,
+        ALERT_DISASTER_COLUMN,
+        ALERT_GRADE_COLUMN,
+        ALERT_AFFECTED_COLUMN,
+    ]
+    if include_region:
+        subset.append(ALERT_REGION_COLUMN)
+    if include_sigungu:
+        subset.append(ALERT_SIGUNGU_COLUMN)
+
+    return dataframe.drop_duplicates(subset=subset).copy()
+
+
 def build_grade_distribution_chart(dataframe: pd.DataFrame) -> go.Figure:
     if dataframe.empty:
         return _build_empty_figure("선택한 조건에 맞는 특보등급 분포가 없습니다.")
 
+    deduped = _deduplicate_alert_events(dataframe)
     summary = (
-        dataframe.groupby(["특보등급", "재난종류"], as_index=False)
+        deduped.groupby(["특보등급", "재난종류"], as_index=False)
         .size()
         .rename(columns={"size": "발생건수"})
     )
@@ -337,8 +369,9 @@ def build_monthly_distribution_chart(dataframe: pd.DataFrame) -> go.Figure:
     if dataframe.empty:
         return _build_empty_figure("선택한 조건에 맞는 월별 재난 분포가 없습니다.")
 
+    deduped = _deduplicate_alert_events(dataframe)
     summary = (
-        dataframe.assign(년월=dataframe["발표시간"].dt.to_period("M").astype(str))
+        deduped.assign(년월=deduped["발표시간"].dt.to_period("M").astype(str))
         .groupby(["년월", "재난종류"], as_index=False)
         .size()
         .rename(columns={"size": "발생건수"})
@@ -362,13 +395,14 @@ def build_region_disaster_counts_chart(dataframe: pd.DataFrame) -> go.Figure:
     if dataframe.empty:
         return _build_empty_figure("선택한 조건에 맞는 지역별 재난 비교가 없습니다.")
 
+    deduped = _deduplicate_alert_events(dataframe, include_region=True)
     summary = (
-        dataframe.groupby(["지역", "특보등급", "재난종류"], as_index=False)
+        deduped.groupby(["지역", "특보등급", "재난종류"], as_index=False)
         .size()
         .rename(columns={"size": "발생건수"})
     )
     grades = summary["특보등급"].drop_duplicates().tolist()
-    region_order = dataframe.groupby("지역").size().sort_values(ascending=False).index.tolist()
+    region_order = deduped.groupby("지역").size().sort_values(ascending=False).index.tolist()
     chart_kwargs = dict(
         data_frame=summary,
         x="지역",
@@ -399,8 +433,9 @@ def build_region_disaster_profile_radar_chart(dataframe: pd.DataFrame) -> go.Fig
     if dataframe.empty:
         return _build_empty_figure("선택한 조건에 맞는 지역별 재난 특성 비교가 없습니다.")
 
+    deduped = _deduplicate_alert_events(dataframe, include_region=True)
     summary = (
-        dataframe.groupby(["지역", "재난종류"], as_index=False)
+        deduped.groupby(["지역", "재난종류"], as_index=False)
         .size()
         .rename(columns={"size": "발생건수"})
     )
@@ -462,8 +497,9 @@ def build_monthly_disaster_pattern_heatmap_chart(dataframe: pd.DataFrame) -> go.
     if dataframe.empty:
         return _build_empty_figure("선택한 조건에 맞는 월별 재난 패턴이 없습니다.")
 
+    deduped = _deduplicate_alert_events(dataframe)
     summary = (
-        dataframe.assign(년월=dataframe["발표시간"].dt.to_period("M").astype(str))
+        deduped.assign(년월=deduped["발표시간"].dt.to_period("M").astype(str))
         .groupby(["재난종류", "년월"], as_index=False)
         .size()
         .rename(columns={"size": "발생건수"})
@@ -506,8 +542,9 @@ def build_disaster_region_scatter_chart(dataframe: pd.DataFrame) -> go.Figure:
     if dataframe.empty:
         return _build_empty_figure("선택한 조건에 맞는 재난종류별 특보 발생 지역이 없습니다.")
 
+    deduped = _deduplicate_alert_events(dataframe, include_region=True, include_sigungu=True)
     summary = (
-        dataframe[["재난종류", "시군구"]]
+        deduped[["재난종류", "시군구"]]
         .dropna()
         .groupby(["재난종류", "시군구"], as_index=False)
         .size()
@@ -652,10 +689,11 @@ def render_page() -> None:
         st.warning("선택한 조건에 맞는 분석 데이터가 없습니다. 필터를 조정해 주세요.")
 
     kpis = build_kpis(filtered_alerts)
+    deduped_kpi_alerts = _deduplicate_alert_events(filtered_alerts)
     latest_period = _format_latest_period(kpis["latest_period"])
 
     metric_columns = st.columns(4, gap="medium")
-    metric_columns[0].metric("특보 기록", f"{float(kpis['alert_count']):,.0f}")
+    metric_columns[0].metric("특보 기록", f"{float(len(deduped_kpi_alerts)):,.0f}")
     metric_columns[1].metric("재난종류", f"{float(kpis['disaster_count']):,.0f}")
     metric_columns[2].metric("지역", f"{float(kpis['region_count']):,.0f}")
     metric_columns[3].metric("최신 특보", latest_period)
