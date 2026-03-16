@@ -14,6 +14,9 @@ from app import (
     ANALYSIS_COLUMNS,
     APP_ICON,
     APP_TITLE,
+    BORDER_SOFT,
+    TEXT_MUTED,
+    TEXT_PRIMARY,
     build_kpis,
     configure_page,
     load_analysis_dataset,
@@ -28,30 +31,30 @@ PAGE_LABEL = "데이터 분석"
 MAP_FILE = Path(__file__).resolve().parents[1] / "preprocessing_code" / "shelter_type_layer_map1.html"
 DEFAULT_MAP_HEIGHT = 680
 COLOR_SEQUENCE = [
-    "#22d3ee",
-    "#60a5fa",
-    "#f97316",
-    "#fb7185",
-    "#a78bfa",
-    "#facc15",
-    "#34d399",
-    "#f472b6",
+    "#0f766e",
+    "#2563eb",
+    "#ea580c",
+    "#e11d48",
+    "#7c3aed",
+    "#ca8a04",
+    "#15803d",
+    "#be185d",
 ]
 DISASTER_COLOR_MAP = {
-    "호우": "#60a5fa",
-    "폭염": "#f97316",
-    "한파": "#67e8f9",
-    "강풍": "#fb7185",
-    "태풍": "#a78bfa",
-    "대설": "#facc15",
-    "건조": "#f59e0b",
-    "폭풍해일": "#22d3ee",
+    "호우": "#2563eb",
+    "폭염": "#ea580c",
+    "한파": "#0891b2",
+    "강풍": "#e11d48",
+    "태풍": "#7c3aed",
+    "대설": "#ca8a04",
+    "건조": "#b45309",
+    "폭풍해일": "#0f766e",
 }
 
 
 def _build_empty_figure(message: str) -> go.Figure:
     figure = go.Figure()
-    figure.add_annotation(text=message, showarrow=False, font=dict(size=16, color="#e5eef9"))
+    figure.add_annotation(text=message, showarrow=False, font=dict(size=16, color=TEXT_PRIMARY))
     figure.update_layout(
         xaxis=dict(visible=False),
         yaxis=dict(visible=False),
@@ -94,13 +97,13 @@ def build_disaster_legend_html(dataframe: pd.DataFrame) -> str:
     items = "".join(
         f"<span style='display:flex;align-items:center;gap:0.5rem;'>"
         f"<span style='width:0.8rem;height:0.8rem;border-radius:999px;background:{color_map[label]};'></span>"
-        f"<span style='color:#e5eef9;font-size:0.95rem;'>{escape(label)}</span>"
+        f"<span style='color:{TEXT_PRIMARY};font-size:0.95rem;'>{escape(label)}</span>"
         f"</span>"
         for label in labels
     )
     return (
         "<div style='padding:0.4rem 0 0 0;'>"
-        "<div style='color:#94a3b8;font-size:0.9rem;font-weight:600;margin-bottom:0.8rem;'>범례</div>"
+        f"<div style='color:{TEXT_MUTED};font-size:0.9rem;font-weight:600;margin-bottom:0.8rem;'>범례</div>"
         f"<div style='display:flex;flex-direction:column;gap:0.7rem;'>{items}</div>"
         "</div>"
     )
@@ -227,7 +230,7 @@ def build_grade_distribution_chart(dataframe: pd.DataFrame) -> go.Figure:
                     xref="paper",
                     yref="paper",
                     showarrow=False,
-                    font=dict(size=12, color="#cbd5e1"),
+                    font=dict(size=12, color=TEXT_MUTED),
                     align="left",
                 )
             ]
@@ -379,7 +382,7 @@ def build_shelter_type_distribution_chart(dataframe: pd.DataFrame) -> go.Figure:
         x=summary["지역"],
         y=summary["무더위쉼터_합계"],
         name="무더위쉼터",
-        marker_color="#f97316",
+        marker_color="#ea580c",
         customdata=summary["대피소_합계"],
         hovertemplate="지역: %{x}<br>무더위쉼터: %{y}<br>총 대피소 수: %{customdata}<extra></extra>",
     )
@@ -387,7 +390,7 @@ def build_shelter_type_distribution_chart(dataframe: pd.DataFrame) -> go.Figure:
         x=summary["지역"],
         y=summary["지진대피소_합계"],
         name="지진대피소",
-        marker_color="#38bdf8",
+        marker_color="#0284c7",
         customdata=summary["대피소_합계"],
         hovertemplate="지역: %{x}<br>지진대피소: %{y}<br>총 대피소 수: %{customdata}<extra></extra>",
     )
@@ -395,7 +398,7 @@ def build_shelter_type_distribution_chart(dataframe: pd.DataFrame) -> go.Figure:
         x=summary["지역"],
         y=summary["한파쉼터"],
         name="한파쉼터",
-        marker_color="#22c55e",
+        marker_color="#15803d",
         customdata=summary["대피소_합계"],
         hovertemplate="지역: %{x}<br>한파쉼터: %{y}<br>총 대피소 수: %{customdata}<extra></extra>",
     )
@@ -450,7 +453,7 @@ def build_region_disaster_vs_shelter_chart(
     )
     figure.update_traces(
         textposition="top center",
-        marker=dict(line=dict(width=1, color="rgba(15, 23, 42, 0.9)")),
+        marker=dict(line=dict(width=1, color=BORDER_SOFT)),
     )
     figure.update_xaxes(title="재난 발생 횟수")
     figure.update_yaxes(title="대피소 수")

@@ -16,7 +16,17 @@ import requests
 import streamlit as st
 import streamlit.components.v1 as components
 
-from app import APP_ICON, APP_TITLE, configure_page, render_page_title, render_section_header
+from app import (
+    APP_ICON,
+    APP_TITLE,
+    BORDER_SOFT,
+    HEADING_FONT_FAMILY,
+    TEXT_MUTED,
+    TEXT_PRIMARY,
+    configure_page,
+    render_page_title,
+    render_section_header,
+)
 
 try:
     from streamlit_geolocation import streamlit_geolocation
@@ -77,10 +87,16 @@ OFFICIAL_GUIDANCE_MESSAGE = (
 )
 TSUNAMI_ETA_WARNING_MESSAGE = "예상 시간은 보행 기준 추정치이며 실제 대피 상황과 다를 수 있습니다."
 RANK_COLORS = ["#0f766e", "#1d4ed8", "#f59e0b"]
-CARD_TEXT_PRIMARY = "#e5eef9"
-CARD_TEXT_MUTED = "#94a3b8"
-CARD_DIVIDER = "rgba(148, 163, 184, 0.16)"
-CARD_ROW_BACKGROUND = "rgba(148, 163, 184, 0.04)"
+CARD_TEXT_PRIMARY = TEXT_PRIMARY
+CARD_TEXT_MUTED = TEXT_MUTED
+CARD_DIVIDER = BORDER_SOFT
+CARD_ROW_BACKGROUND = "rgba(47, 143, 131, 0.06)"
+CARD_META_BACKGROUND = "rgba(255, 250, 242, 0.84)"
+CARD_META_BORDER = "rgba(111, 116, 104, 0.16)"
+CARD_SURFACE_TOP = "rgba(255, 250, 242, 0.98)"
+CARD_SURFACE_BOTTOM = "rgba(244, 236, 223, 0.94)"
+CARD_SHADOW = "rgba(93, 78, 55, 0.12)"
+CARD_FAMILY_BACKGROUND = "rgba(255, 250, 242, 0.88)"
 SHOWCASE_CARD_SCALE = 0.76
 SHOWCASE_CARD_STACK_GAP_REM = 3.10
 SHOWCASE_PANEL_HEIGHT_PX = 680
@@ -157,12 +173,12 @@ def build_shelter_summary_card_html(
     if _is_green_family_color(accent_color):
         accent_seed = "#33FF33"
 
-    vivid_accent = _mix_hex_color(accent_seed, "#f8fafc", 0.16)
+    vivid_accent = _mix_hex_color(accent_seed, "#fffaf2", 0.20)
     accent_glow_strong = f"{vivid_accent}90"
     accent_glow_soft = f"{vivid_accent}54"
-    surface_border = _mix_hex_color(accent_seed, "#f8fafc", 0.42)
-    meta_background = "rgba(8, 17, 28, 0.72)"
-    meta_border = "rgba(56, 189, 248, 0.12)"
+    surface_border = _mix_hex_color(accent_seed, "#fffaf2", 0.55)
+    meta_background = CARD_META_BACKGROUND
+    meta_border = CARD_META_BORDER
     text_primary = CARD_TEXT_PRIMARY
     text_muted = CARD_TEXT_MUTED
     divider_color = CARD_DIVIDER
@@ -247,8 +263,8 @@ def build_shelter_summary_card_html(
     box-sizing: border-box;
     padding: {_scaled_rem(0.18)} {_scaled_rem(0.5)};
     border-radius: 999px;
-    background: rgba(8, 17, 28, 0.6);
-    border: 1px solid rgba(56, 189, 248, 0.12);
+    background: {CARD_FAMILY_BACKGROUND};
+    border: 1px solid {meta_border};
 ">
         <span style="
             color: {text_muted};
@@ -304,8 +320,8 @@ def build_shelter_summary_card_html(
         radial-gradient(circle at top left, {accent_glow_strong}, transparent 32%),
         radial-gradient(circle at center right, {accent_glow_soft}, transparent 44%),
         radial-gradient(circle at bottom left, {accent_glow_soft}, transparent 28%),
-        linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.92));
-    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+        linear-gradient(135deg, {CARD_SURFACE_TOP}, {CARD_SURFACE_BOTTOM});
+    box-shadow: 0 24px 80px {CARD_SHADOW};
     overflow: hidden;
 ">"""
         ).strip(),
@@ -320,7 +336,8 @@ def build_shelter_summary_card_html(
             margin: 0;
             color: {CARD_TEXT_PRIMARY};
             font-size: {_scaled_rem(2.62)};
-            font-weight: 800;
+            font-family: {HEADING_FONT_FAMILY};
+            font-weight: 700;
             line-height: 1.0;
             letter-spacing: -0.035em;
             white-space: nowrap;

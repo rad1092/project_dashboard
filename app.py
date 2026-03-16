@@ -10,8 +10,24 @@ import streamlit as st
 APP_TITLE = "실시간 대피 안내 대시보드"
 APP_ICON = "🚨"
 
-TEXT_PRIMARY = "#e5eef9"
-TEXT_MUTED = "#94a3b8"
+BODY_FONT_FAMILY = '"Noto Sans KR", "Pretendard Variable", "Apple SD Gothic Neo", sans-serif'
+HEADING_FONT_FAMILY = '"Noto Serif KR", "Cormorant Garamond", "AppleMyungjo", serif'
+BACKGROUND_PRIMARY = "#f5efe4"
+BACKGROUND_SECONDARY = "#efe5d7"
+SURFACE_PRIMARY = "#fffaf2"
+SURFACE_SECONDARY = "#f4ecdf"
+SURFACE_TERTIARY = "#ece1d1"
+TEXT_PRIMARY = "#2d3129"
+TEXT_MUTED = "#6f7468"
+TEXT_SOFT = "#8b8f84"
+ACCENT_PRIMARY = "#2f8f83"
+ACCENT_DEEP = "#1f6f68"
+ACCENT_SOFT = "rgba(47, 143, 131, 0.14)"
+BORDER_SOFT = "rgba(111, 116, 104, 0.16)"
+BORDER_ACCENT = "rgba(47, 143, 131, 0.22)"
+SHADOW_SOFT = "rgba(93, 78, 55, 0.12)"
+PLOT_PANEL_BG = "rgba(239, 230, 217, 0.72)"
+PLOT_LEGEND_BG = "rgba(255, 250, 242, 0.96)"
 
 PAGE_META = {
     "home": {"label": "HOME", "url_path": ""},
@@ -21,7 +37,7 @@ PAGE_META = {
 }
 
 HOME_HEADLINE = "실시간 대피 안내 대시보드"
-HOME_SUBTITLE = "최신 재난 특보와 지역별 대피소 정보를 한 화면에서 빠르게 확인할 수 있는 통합 랜딩 화면입니다."
+HOME_SUBTITLE = ""
 
 ALERT_COLUMNS = ["발표시간", "지역", "시군구", "재난종류", "특보등급", "해당지역"]
 SHELTER_COLUMNS = ["대피소명", "주소", "대피소유형", "위도", "경도", "시도", "시군구", "지역", "수용인원"]
@@ -258,6 +274,7 @@ def configure_page(
             layout="wide",
             initial_sidebar_state=initial_sidebar_state,
         )
+    inject_global_theme_styles()
     inject_shared_card_styles()
 
 
@@ -273,52 +290,310 @@ def render_section_header(title: str, caption: str = "") -> None:
         st.caption(caption)
 
 
+def inject_global_theme_styles() -> None:
+    st.markdown(
+        f"""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;600;700;800&family=Noto+Serif+KR:wght@500;600;700&display=swap');
+
+        :root {{
+            --pd-font-body: {BODY_FONT_FAMILY};
+            --pd-font-heading: {HEADING_FONT_FAMILY};
+            --pd-bg: {BACKGROUND_PRIMARY};
+            --pd-bg-alt: {BACKGROUND_SECONDARY};
+            --pd-surface: {SURFACE_PRIMARY};
+            --pd-surface-soft: {SURFACE_SECONDARY};
+            --pd-surface-muted: {SURFACE_TERTIARY};
+            --pd-text: {TEXT_PRIMARY};
+            --pd-text-muted: {TEXT_MUTED};
+            --pd-text-soft: {TEXT_SOFT};
+            --pd-accent: {ACCENT_PRIMARY};
+            --pd-accent-deep: {ACCENT_DEEP};
+            --pd-accent-soft: {ACCENT_SOFT};
+            --pd-border: {BORDER_SOFT};
+            --pd-border-accent: {BORDER_ACCENT};
+            --pd-shadow: {SHADOW_SOFT};
+        }}
+
+        html, body, .stApp {{
+            font-family: var(--pd-font-body);
+        }}
+
+        .stApp,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stAppViewContainer"] > .main {{
+            background:
+                radial-gradient(circle at top left, rgba(47, 143, 131, 0.08), transparent 28%),
+                radial-gradient(circle at top right, rgba(212, 183, 137, 0.10), transparent 24%),
+                linear-gradient(180deg, var(--pd-bg) 0%, #f2eadc 100%);
+            color: var(--pd-text);
+        }}
+
+        [data-testid="stHeader"] {{
+            background: rgba(245, 239, 228, 0.78);
+            border-bottom: 1px solid var(--pd-border);
+            backdrop-filter: blur(14px);
+        }}
+
+        [data-testid="stMainBlockContainer"] {{
+            padding-top: 2.1rem;
+        }}
+
+        section[data-testid="stSidebar"] {{
+            background: linear-gradient(180deg, #e9dfcf 0%, #efe5d7 100%);
+            border-right: 1px solid rgba(111, 116, 104, 0.18);
+        }}
+
+        section[data-testid="stSidebar"] > div {{
+            background: transparent;
+        }}
+
+        section[data-testid="stSidebar"] * {{
+            color: var(--pd-text);
+        }}
+
+        [data-testid="stIconMaterial"],
+        [data-testid="stIconMaterial"] span,
+        .material-symbols-rounded,
+        .material-symbols-outlined {{
+            font-family: "Material Symbols Rounded", "Material Symbols Outlined" !important;
+            font-weight: normal !important;
+            font-style: normal !important;
+        }}
+
+        [data-testid="stSidebarNav"] {{
+            background: transparent;
+        }}
+
+        [data-testid="stSidebarNav"] a {{
+            border-radius: 18px;
+            color: var(--pd-text);
+            transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+        }}
+
+        [data-testid="stSidebarNav"] a:hover {{
+            background: rgba(255, 250, 242, 0.72);
+            box-shadow: inset 0 0 0 1px rgba(47, 143, 131, 0.12);
+            transform: translateX(1px);
+        }}
+
+        [data-testid="stSidebarNav"] a[aria-current="page"] {{
+            background:
+                radial-gradient(circle at top left, rgba(47, 143, 131, 0.12), transparent 55%),
+                linear-gradient(135deg, rgba(255, 250, 242, 0.95), rgba(244, 236, 223, 0.96));
+            box-shadow:
+                inset 0 0 0 1px rgba(47, 143, 131, 0.20),
+                0 12px 28px rgba(93, 78, 55, 0.08);
+        }}
+
+        h1, h2, h3, h4, h5, h6 {{
+            color: var(--pd-text);
+            font-family: var(--pd-font-heading);
+            letter-spacing: -0.02em;
+        }}
+
+        h1 {{
+            font-weight: 700;
+        }}
+
+        h2, h3 {{
+            font-weight: 600;
+        }}
+
+        p, li, label, span, div[data-testid="stMarkdownContainer"], .stCaption {{
+            color: var(--pd-text);
+        }}
+
+        div[data-testid="stCaptionContainer"] p,
+        .stCaption,
+        section[data-testid="stSidebar"] div[data-testid="stCaptionContainer"] p {{
+            color: var(--pd-text-muted);
+        }}
+
+        div[data-testid="stAlert"] {{
+            background: linear-gradient(135deg, rgba(255, 250, 242, 0.95), rgba(244, 236, 223, 0.92));
+            border: 1px solid rgba(47, 143, 131, 0.18);
+            border-radius: 20px;
+            box-shadow: 0 14px 32px rgba(93, 78, 55, 0.08);
+        }}
+
+        div[data-testid="stAlert"] * {{
+            color: var(--pd-text);
+        }}
+
+        .stButton > button,
+        section[data-testid="stSidebar"] .stButton > button {{
+            border-radius: 16px;
+            border: 1px solid var(--pd-border-accent);
+            background: linear-gradient(135deg, rgba(240, 252, 249, 0.98), rgba(225, 243, 238, 0.94));
+            color: var(--pd-accent-deep);
+            font-family: var(--pd-font-body);
+            font-weight: 700;
+            box-shadow: 0 10px 24px rgba(93, 78, 55, 0.08);
+        }}
+
+        .stButton > button:hover,
+        section[data-testid="stSidebar"] .stButton > button:hover {{
+            border-color: rgba(47, 143, 131, 0.28);
+            background: linear-gradient(135deg, rgba(236, 249, 246, 0.98), rgba(218, 239, 234, 0.96));
+            color: var(--pd-accent-deep);
+        }}
+
+        .stButton > button:focus,
+        .stButton > button:focus-visible {{
+            box-shadow:
+                0 0 0 3px rgba(47, 143, 131, 0.12),
+                0 10px 24px rgba(93, 78, 55, 0.08);
+        }}
+
+        .stTextInput input,
+        .stNumberInput input,
+        .stTextArea textarea {{
+            color: var(--pd-text);
+            font-family: var(--pd-font-body);
+        }}
+
+        .stTextInput div[data-baseweb="base-input"] > div,
+        .stNumberInput div[data-baseweb="base-input"] > div,
+        .stTextArea div[data-baseweb="textarea"] {{
+            background: rgba(255, 250, 242, 0.9);
+            border: 1px solid var(--pd-border);
+            border-radius: 16px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+        }}
+
+        .stSelectbox div[data-baseweb="select"] > div,
+        .stMultiSelect div[data-baseweb="select"] > div {{
+            background: rgba(255, 250, 242, 0.9);
+            border: 1px solid var(--pd-border);
+            border-radius: 16px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+        }}
+
+        .stSelectbox div[data-baseweb="select"] input,
+        .stMultiSelect div[data-baseweb="select"] input {{
+            color: var(--pd-text);
+        }}
+
+        div[data-baseweb="tag"] {{
+            background: rgba(47, 143, 131, 0.12);
+            border-radius: 999px;
+            border: 1px solid rgba(47, 143, 131, 0.16);
+            color: var(--pd-accent-deep);
+        }}
+
+        .stRadio [role="radiogroup"] label {{
+            background: rgba(255, 250, 242, 0.84);
+            border: 1px solid var(--pd-border);
+            border-radius: 16px;
+            padding: 0.4rem 0.65rem;
+        }}
+
+        .stRadio [role="radiogroup"] label:has(input:checked) {{
+            background: rgba(47, 143, 131, 0.12);
+            border-color: rgba(47, 143, 131, 0.22);
+        }}
+
+        button[data-baseweb="tab"] {{
+            border-radius: 999px;
+            border: 1px solid var(--pd-border);
+            background: rgba(255, 250, 242, 0.72);
+            color: var(--pd-text-muted);
+            font-family: var(--pd-font-body);
+            font-weight: 700;
+            padding: 0.5rem 1rem;
+        }}
+
+        button[data-baseweb="tab"][aria-selected="true"] {{
+            background:
+                radial-gradient(circle at top left, rgba(47, 143, 131, 0.14), transparent 58%),
+                linear-gradient(135deg, rgba(255, 250, 242, 0.96), rgba(241, 248, 245, 0.92));
+            border-color: var(--pd-border-accent);
+            color: var(--pd-accent-deep);
+            box-shadow: 0 10px 24px rgba(93, 78, 55, 0.08);
+        }}
+
+        div[data-testid="stExpander"] details {{
+            border-radius: 22px;
+            border: 1px solid var(--pd-border);
+            background: linear-gradient(135deg, rgba(255, 250, 242, 0.95), rgba(244, 236, 223, 0.92));
+            box-shadow: 0 16px 36px rgba(93, 78, 55, 0.08);
+        }}
+
+        div[data-testid="stExpander"] summary {{
+            color: var(--pd-text);
+            font-family: var(--pd-font-body);
+            font-weight: 700;
+        }}
+
+        [data-testid="stDataFrame"],
+        [data-testid="stTable"] {{
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid var(--pd-border);
+            box-shadow: 0 16px 36px rgba(93, 78, 55, 0.08);
+        }}
+
+        [data-testid="stMarkdownContainer"] a {{
+            color: var(--pd-accent-deep);
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def inject_shared_card_styles() -> None:
     st.markdown(
-        """
+        f"""
         <style>
-        div[data-testid="stMetric"] {
+        div[data-testid="stMetric"] {{
             padding: 1.15rem 1.2rem;
             border-radius: 24px;
-            border: 1px solid rgba(56, 189, 248, 0.20);
+            border: 1px solid {BORDER_ACCENT};
             background:
-                radial-gradient(circle at top left, rgba(20, 184, 166, 0.20), transparent 34%),
-                radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.18), transparent 28%),
-                linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.92));
-            box-shadow: 0 18px 48px rgba(15, 23, 42, 0.24);
-        }
-        div[data-testid="stMetricLabel"] p {
-            color: #94a3b8;
+                radial-gradient(circle at top left, rgba(47, 143, 131, 0.16), transparent 34%),
+                radial-gradient(circle at bottom right, rgba(212, 183, 137, 0.16), transparent 30%),
+                linear-gradient(135deg, rgba(255, 250, 242, 0.98), rgba(244, 236, 223, 0.94));
+            box-shadow: 0 18px 48px {SHADOW_SOFT};
+        }}
+        div[data-testid="stMetricLabel"] p {{
+            color: {TEXT_MUTED};
             font-weight: 600;
             letter-spacing: 0.02em;
-        }
-        div[data-testid="stMetricValue"] {
-            color: #f8fafc;
-        }
-        div[data-testid="stVerticalBlockBorderWrapper"] {
+        }}
+        div[data-testid="stMetricValue"] {{
+            color: {TEXT_PRIMARY};
+            font-family: {HEADING_FONT_FAMILY};
+        }}
+        div[data-testid="stMetricValue"] > div {{
+            font-size: clamp(1.9rem, 2.15vw, 2.35rem);
+            line-height: 1.08;
+        }}
+        div[data-testid="stVerticalBlockBorderWrapper"] {{
             border-radius: 28px;
-            border: 1px solid rgba(56, 189, 248, 0.20);
+            border: 1px solid {BORDER_SOFT};
             background:
-                radial-gradient(circle at top left, rgba(20, 184, 166, 0.22), transparent 36%),
-                radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.18), transparent 30%),
-                linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.92));
-            box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+                radial-gradient(circle at top left, rgba(47, 143, 131, 0.12), transparent 38%),
+                radial-gradient(circle at bottom right, rgba(212, 183, 137, 0.12), transparent 34%),
+                linear-gradient(135deg, rgba(255, 250, 242, 0.96), rgba(244, 236, 223, 0.92));
+            box-shadow: 0 24px 64px rgba(93, 78, 55, 0.12);
             overflow: hidden;
-        }
-        div[data-testid="stVerticalBlockBorderWrapper"] > div {
+        }}
+        div[data-testid="stVerticalBlockBorderWrapper"] > div {{
             background: transparent;
-        }
-        div[data-testid="stVerticalBlockBorderWrapper"] iframe {
+        }}
+        div[data-testid="stVerticalBlockBorderWrapper"] iframe {{
             border-radius: 22px;
-        }
+        }}
         div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stPlotlyChart"] > div,
-        div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stDataFrame"] {
+        div[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stDataFrame"] {{
             border-radius: 22px;
             overflow: hidden;
-        }
-        div[data-testid="stTabs"] [data-baseweb="tab-panel"] {
+        }}
+        div[data-testid="stTabs"] [data-baseweb="tab-panel"] {{
             padding-top: 0.8rem;
-        }
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -328,33 +603,33 @@ def inject_shared_card_styles() -> None:
 def style_plotly_figure(figure: go.Figure) -> go.Figure:
     figure.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(11, 18, 32, 0.24)",
+        plot_bgcolor=PLOT_PANEL_BG,
         font=dict(color=TEXT_PRIMARY),
         legend=dict(
-            bgcolor="rgba(8, 17, 28, 0.82)",
-            bordercolor="rgba(36, 50, 68, 0.95)",
+            bgcolor=PLOT_LEGEND_BG,
+            bordercolor=BORDER_SOFT,
             borderwidth=1,
             font=dict(color=TEXT_PRIMARY),
         ),
         hoverlabel=dict(
-            bgcolor="rgba(8, 17, 28, 0.94)",
-            bordercolor="rgba(45, 212, 191, 0.28)",
+            bgcolor=PLOT_LEGEND_BG,
+            bordercolor=BORDER_ACCENT,
             font=dict(color=TEXT_PRIMARY),
         ),
         margin=dict(t=70, b=30, l=30, r=30),
     )
     figure.update_xaxes(
-        gridcolor="rgba(148, 163, 184, 0.16)",
-        linecolor="rgba(148, 163, 184, 0.22)",
-        zerolinecolor="rgba(148, 163, 184, 0.16)",
+        gridcolor="rgba(111, 116, 104, 0.14)",
+        linecolor="rgba(111, 116, 104, 0.22)",
+        zerolinecolor="rgba(111, 116, 104, 0.14)",
         tickfont=dict(color=TEXT_MUTED),
         title_font=dict(color=TEXT_MUTED),
         automargin=True,
     )
     figure.update_yaxes(
-        gridcolor="rgba(148, 163, 184, 0.16)",
-        linecolor="rgba(148, 163, 184, 0.22)",
-        zerolinecolor="rgba(148, 163, 184, 0.16)",
+        gridcolor="rgba(111, 116, 104, 0.14)",
+        linecolor="rgba(111, 116, 104, 0.22)",
+        zerolinecolor="rgba(111, 116, 104, 0.14)",
         tickfont=dict(color=TEXT_MUTED),
         title_font=dict(color=TEXT_MUTED),
         automargin=True,
@@ -370,47 +645,86 @@ def _format_latest_period(value: object) -> str:
 
 def _render_home_hero() -> None:
     st.markdown(
-        """
+        f"""
         <style>
-        .home-hero {
-            padding: 2.3rem 2.4rem;
-            border-radius: 28px;
-            border: 1px solid rgba(56, 189, 248, 0.20);
+        [data-testid="stMainBlockContainer"]:has(.home-page-marker) {{
+            max-width: 1280px;
+            min-height: calc(100vh - 5rem);
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }}
+        [data-testid="stMainBlockContainer"]:has(.home-page-marker) > div {{
+            width: 100%;
+        }}
+        [data-testid="stMainBlockContainer"]:has(.home-page-marker) div[data-testid="stMetric"] {{
+            min-height: 8.9rem;
+            padding: 1.05rem 1.1rem;
+        }}
+        [data-testid="stMainBlockContainer"]:has(.home-page-marker) div[data-testid="stMetricLabel"] p {{
+            font-size: 0.95rem;
+        }}
+        [data-testid="stMainBlockContainer"]:has(.home-page-marker) div[data-testid="stMetricValue"] > div {{
+            font-size: clamp(1.75rem, 1.95vw, 2.15rem);
+        }}
+        .home-hero {{
+            padding: clamp(2.4rem, 4vw, 3.1rem) clamp(1.7rem, 3vw, 2.8rem);
+            border-radius: 32px;
+            border: 1px solid {BORDER_ACCENT};
             background:
-                radial-gradient(circle at top left, rgba(20, 184, 166, 0.22), transparent 36%),
-                radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.18), transparent 30%),
-                linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.92));
-            box-shadow: 0 24px 80px rgba(15, 23, 42, 0.28);
+                radial-gradient(circle at top left, rgba(47, 143, 131, 0.18), transparent 36%),
+                radial-gradient(circle at bottom right, rgba(212, 183, 137, 0.16), transparent 30%),
+                linear-gradient(135deg, rgba(255, 250, 242, 0.99), rgba(244, 236, 223, 0.94));
+            box-shadow: 0 24px 80px rgba(93, 78, 55, 0.12);
             text-align: center;
-        }
-        .home-kicker {
-            margin: 0 0 0.85rem 0;
-            color: #5eead4;
+        }}
+        .home-kicker {{
+            margin: 0 0 0.7rem 0;
+            color: {ACCENT_DEEP};
             font-size: 0.88rem;
             letter-spacing: 0.18em;
             text-transform: uppercase;
             font-weight: 700;
-        }
-        .home-title {
+        }}
+        .home-title {{
             margin: 0;
-            color: #f8fafc;
+            color: {TEXT_PRIMARY};
             font-size: clamp(2.1rem, 2.8vw, 3.4rem);
-            font-weight: 800;
+            font-weight: 700;
             line-height: 1.08;
-        }
-        .home-copy {
-            margin: 1rem auto 0;
-            max-width: 700px;
-            color: #cbd5e1;
+            font-family: {HEADING_FONT_FAMILY};
+        }}
+        .home-copy {{
+            margin: 0.85rem auto 0;
+            max-width: 760px;
+            color: {TEXT_MUTED};
             font-size: 1.05rem;
             line-height: 1.65;
-        }
+        }}
+        @media (max-width: 900px) {{
+            [data-testid="stMainBlockContainer"]:has(.home-page-marker) {{
+                min-height: auto;
+                padding-top: 0.8rem;
+                padding-bottom: 0.6rem;
+                justify-content: flex-start;
+            }}
+            [data-testid="stMainBlockContainer"]:has(.home-page-marker) div[data-testid="stMetric"] {{
+                min-height: auto;
+            }}
+            .home-hero {{
+                padding: 2rem 1.35rem;
+                border-radius: 26px;
+            }}
+        }}
         </style>
         """,
         unsafe_allow_html=True,
     )
     st.markdown(
         f"""
+        <div class="home-page-marker"></div>
         <div class="home-hero">
             <p class="home-kicker">Disaster Dashboard</p>
             <h1 class="home-title">{HOME_HEADLINE}</h1>
@@ -443,17 +757,13 @@ def render_home_page() -> None:
     )
     latest_period = _format_latest_period(kpis["latest_period"])
 
-    _, center, _ = st.columns([0.8, 4.8, 0.8], gap="large")
+    _, center, _ = st.columns([0.45, 6.1, 0.45], gap="small")
     with center:
         _render_home_hero()
-
-    _, metrics_center, _ = st.columns([0.8, 4.8, 0.8], gap="large")
-    with metrics_center:
-        with st.container(border=True):
-            metric_columns = st.columns(3, gap="medium")
-            metric_columns[0].metric("전체 대피소", f"{float(total_shelters):,.0f}")
-            metric_columns[1].metric("특보 지역", f"{float(kpis['region_count']):,.0f}")
-            metric_columns[2].metric("최신 특보 시각", latest_period)
+        metric_columns = st.columns(3, gap="medium")
+        metric_columns[0].metric("전체 대피소", f"{float(total_shelters):,.0f}")
+        metric_columns[1].metric("특보 집계 지역 수", f"{float(kpis['region_count']):,.0f}")
+        metric_columns[2].metric("최신 특보 시각", latest_period)
 
 
 def build_navigation() -> list[st.Page]:
@@ -491,5 +801,3 @@ def main() -> None:
 
 if __name__ == "__main__" and os.environ.get("PROJECT_DASHBOARD_IMPORT_ONLY") != "1":
     main()
-
-
