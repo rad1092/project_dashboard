@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from pathlib import Path
 
 import pandas as pd
@@ -129,6 +130,126 @@ def _read_csv(path: Path) -> pd.DataFrame:
     raise RuntimeError(f"CSV를 읽을 수 없습니다: {path}")
 
 
+def _get_repo_default_db_dir() -> Path:
+    return Path(__file__).resolve().parent / "preprocessing_code" / "data"
+
+
+def _find_db_in_directory(directory: Path) -> Path | None:
+    if not directory.exists() or not directory.is_dir():
+        return None
+
+    preferred_path = directory / "재난대피소.db"
+    if preferred_path.exists():
+        return preferred_path
+
+    matches = sorted(directory.glob("*.db"))
+    if matches:
+        return matches[0]
+    return None
+
+
+def resolve_disaster_db_path(path_override: str | Path | None = None) -> Path | None:
+    candidate_roots: list[Path] = []
+    if path_override is not None:
+        candidate_roots.append(Path(path_override))
+    else:
+        candidate_roots.append(_get_repo_default_db_dir())
+
+    for candidate in candidate_roots:
+        resolved = candidate.expanduser().resolve()
+        if resolved.is_file() and resolved.suffix.lower() == ".db":
+            return resolved
+
+        for directory in (
+            resolved / "preprocessing_code" / "data",
+            resolved / "data",
+            resolved,
+        ):
+            database_path = _find_db_in_directory(directory)
+            if database_path is not None:
+                return database_path.resolve()
+
+    return None
+
+
+def _load_alerts_dataframe_from_db(path_override: str | Path | None = None) -> pd.DataFrame | None:
+    database_path = resolve_disaster_db_path(path_override)
+    if database_path is None:
+        return None
+
+    query = """
+        SELECT
+            da.발표시간,
+            r.시도 AS 지역,
+            r.시군구,
+            dt.재난이름 AS 재난종류,
+            da.특보등급,
+            da.해당지역
+        FROM danger_alerts AS da
+        LEFT JOIN regions AS r ON da.지역_id = r.지역_id
+        LEFT JOIN disaster_types AS dt ON da.재난유형_id = dt.재난유형_id
+    """
+    with sqlite3.connect(database_path) as connection:
+        alerts = pd.read_sql_query(query, connection)
+
+    return _prepare_alerts(alerts.loc[:, ALERT_COLUMNS])
+
+
+def _load_shelters_dataframe_from_db(path_override: str | Path | None = None) -> pd.DataFrame | None:
+    database_path = resolve_disaster_db_path(path_override)
+    if database_path is None:
+        return None
+
+    query = """
+        SELECT
+            s.대피소명,
+            s.주소,
+            s.대피소유형,
+            s.위도,
+            s.경도,
+            r.시도,
+            r.시군구,
+            COALESCE(s.지역설명, r.시도) AS 지역,
+            s.수용인원
+        FROM shelters AS s
+        LEFT JOIN regions AS r ON s.지역_id = r.지역_id
+    """
+    with sqlite3.connect(database_path) as connection:
+        shelters = pd.read_sql_query(query, connection)
+
+    return _prepare_shelters(shelters.loc[:, SHELTER_COLUMNS])
+
+
+def _load_special_shelters_dataframe_from_db(
+    table_name: str,
+    expected_columns: list[str],
+    label: str,
+    path_override: str | Path | None = None,
+) -> pd.DataFrame | None:
+    database_path = resolve_disaster_db_path(path_override)
+    if database_path is None:
+        return None
+
+    query = f"""
+        SELECT
+            s.대피소명,
+            s.주소,
+            s.위도,
+            s.경도,
+            COALESCE(sp.수용인원, s.수용인원) AS 수용인원,
+            COALESCE(s.지역설명, r.시도) AS 지역,
+            r.시도,
+            r.시군구
+        FROM {table_name} AS sp
+        INNER JOIN shelters AS s ON sp.대피소_id = s.대피소_id
+        LEFT JOIN regions AS r ON s.지역_id = r.지역_id
+    """
+    with sqlite3.connect(database_path) as connection:
+        shelters = pd.read_sql_query(query, connection)
+
+    return _prepare_special_shelters(shelters.loc[:, expected_columns], expected_columns, label)
+
+
 def _validate_columns(dataframe: pd.DataFrame, expected_columns: list[str], label: str) -> None:
     missing_columns = [column for column in expected_columns if column not in dataframe.columns]
     if missing_columns:
@@ -181,6 +302,10 @@ def _prepare_special_shelters(
 
 
 def load_alerts_dataframe_uncached(path_override: str | Path | None = None) -> pd.DataFrame:
+    db_frame = _load_alerts_dataframe_from_db(path_override)
+    if db_frame is not None:
+        return db_frame
+
     data_dir = resolve_data_dir(path_override)
     return _prepare_alerts(_read_csv(data_dir / DATASET_FILE_MAP["alerts"]))
 
@@ -191,6 +316,10 @@ def load_alerts_dataframe(path_override: str | None = None) -> pd.DataFrame:
 
 
 def load_shelters_dataframe_uncached(path_override: str | Path | None = None) -> pd.DataFrame:
+    db_frame = _load_shelters_dataframe_from_db(path_override)
+    if db_frame is not None:
+        return db_frame
+
     data_dir = resolve_data_dir(path_override)
     return _prepare_shelters(_read_csv(data_dir / DATASET_FILE_MAP["shelters"]))
 
@@ -203,6 +332,15 @@ def load_shelters_dataframe(path_override: str | None = None) -> pd.DataFrame:
 def load_earthquake_shelters_dataframe_uncached(
     path_override: str | Path | None = None,
 ) -> pd.DataFrame:
+    db_frame = _load_special_shelters_dataframe_from_db(
+        "earthquake_shelters",
+        EARTHQUAKE_COLUMNS,
+        "earthquake_shelter_clean_2.csv",
+        path_override,
+    )
+    if db_frame is not None:
+        return db_frame
+
     data_dir = resolve_data_dir(path_override)
     return _prepare_special_shelters(
         _read_csv(data_dir / DATASET_FILE_MAP["earthquake_shelters"]),
@@ -219,6 +357,15 @@ def load_earthquake_shelters_dataframe(path_override: str | None = None) -> pd.D
 def load_tsunami_shelters_dataframe_uncached(
     path_override: str | Path | None = None,
 ) -> pd.DataFrame:
+    db_frame = _load_special_shelters_dataframe_from_db(
+        "tsunami_shelters",
+        TSUNAMI_COLUMNS,
+        "tsunami_shelter_clean_2.csv",
+        path_override,
+    )
+    if db_frame is not None:
+        return db_frame
+
     data_dir = resolve_data_dir(path_override)
     return _prepare_special_shelters(
         _read_csv(data_dir / DATASET_FILE_MAP["tsunami_shelters"]),
