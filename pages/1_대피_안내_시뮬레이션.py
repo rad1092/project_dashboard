@@ -342,8 +342,9 @@ def build_shelter_summary_card_html(
             color: {CARD_TEXT_PRIMARY};
             font-size: {_scaled_rem(2.34)};
             font-family: {HEADING_FONT_FAMILY};
-            font-weight: 900;
-            line-height: 1.0;
+            font-weight: 800;
+            line-height: 1.08;
+            padding-bottom: 0.06em;
             letter-spacing: -0.035em;
             -webkit-text-stroke: 0.2px {CARD_TEXT_PRIMARY};
             text-shadow: 0 0 0.01px currentColor;
