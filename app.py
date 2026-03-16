@@ -11,8 +11,8 @@ import streamlit as st
 APP_TITLE = "실시간 대피 안내 대시보드"
 APP_ICON = "🚨"
 
-BODY_FONT_FAMILY = '"Noto Sans KR", "Pretendard Variable", "Apple SD Gothic Neo", sans-serif'
-HEADING_FONT_FAMILY = '"Noto Serif KR", "Cormorant Garamond", "AppleMyungjo", serif'
+BODY_FONT_FAMILY = "serif"
+HEADING_FONT_FAMILY = "serif"
 BACKGROUND_PRIMARY = "#f5efe4"
 BACKGROUND_SECONDARY = "#efe5d7"
 SURFACE_PRIMARY = "#fffaf2"
@@ -295,8 +295,6 @@ def inject_global_theme_styles() -> None:
     st.markdown(
         f"""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;600;700;800&family=Noto+Serif+KR:wght@500;600;700&display=swap');
-
         :root {{
             --pd-font-body: {BODY_FONT_FAMILY};
             --pd-font-heading: {HEADING_FONT_FAMILY};
@@ -316,8 +314,8 @@ def inject_global_theme_styles() -> None:
             --pd-shadow: {SHADOW_SOFT};
         }}
 
-        html, body, .stApp {{
-            font-family: var(--pd-font-body);
+        html, body, .stApp, .stApp * {{
+            font-family: var(--pd-font-body) !important;
         }}
 
         .stApp,
@@ -568,7 +566,7 @@ def inject_shared_card_styles() -> None:
             font-family: {HEADING_FONT_FAMILY};
         }}
         div[data-testid="stMetricValue"] > div {{
-            font-size: clamp(1.78rem, 2vw, 2.18rem);
+            font-size: calc(clamp(1.78rem, 2vw, 2.18rem) - 1pt);
             line-height: 1.08;
         }}
         [data-testid="stMainBlockContainer"]:has(.pd-compact-top-metrics-marker) div[data-testid="stMetric"] {{

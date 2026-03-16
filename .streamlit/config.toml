@@ -4,7 +4,7 @@ primaryColor = "#2f8f83"
 backgroundColor = "#f5efe4"
 secondaryBackgroundColor = "#fffaf2"
 textColor = "#2d3129"
-font = "sans serif"
+font = "serif"
 showSidebarBorder = true
 
 [theme.sidebar]
