@@ -493,4 +493,3 @@ if __name__ == "__main__" and os.environ.get("PROJECT_DASHBOARD_IMPORT_ONLY") !=
     main()
 
 
-"#84B8F3"
