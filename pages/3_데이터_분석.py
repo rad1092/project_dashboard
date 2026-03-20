@@ -103,46 +103,10 @@ def _get_repo_default_db_path() -> Path:
     return Path(__file__).resolve().parents[1] / "preprocessing_code" / "data" / "simple_shelter_dashboard.db"
 
 
-def _find_db_in_directory(directory: Path) -> Path | None:
-    if not directory.exists() or not directory.is_dir():
-        return None
-
-    for preferred_name in (
-        "simple_shelter_dashboard.db",
-        "simple_shelter_dashboard_copy.db",
-        "Emergency_shelter.db",
-        "Emergency_Shelter.db",
-    ):
-        preferred_path = directory / preferred_name
-        if preferred_path.exists():
-            return preferred_path
-
-    matches = sorted(directory.glob("*.db"))
-    if matches:
-        return matches[0]
-    return None
-
-
-def resolve_disaster_db_path(path_override: str | Path | None = None) -> Path | None:
-    candidate_roots = [Path(path_override)] if path_override is not None else [_get_repo_default_db_path()]
-
-    for candidate in candidate_roots:
-        resolved = candidate.expanduser().resolve()
-        if resolved.is_file() and resolved.suffix.lower() == ".db":
-            return resolved
-
-        for directory in (
-            resolved / "preprocessing_data" / "preprocessing",
-            resolved.parent / "preprocessing_data" / "preprocessing",
-            resolved / "preprocessing_code" / "data",
-            resolved.parent / "preprocessing_code" / "data",
-            resolved / "data",
-            resolved,
-        ):
-            database_path = _find_db_in_directory(directory)
-            if database_path is not None:
-                return database_path.resolve()
-
+def resolve_disaster_db_path(_path_override: str | Path | None = None) -> Path | None:
+    database_path = _get_repo_default_db_path().resolve()
+    if database_path.is_file():
+        return database_path
     return None
 
 
