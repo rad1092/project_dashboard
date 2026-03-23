@@ -54,6 +54,12 @@ DISASTER_COLOR_MAP = {
     "건조": "#b45309",
     "폭풍해일": "#0f766e",
 }
+SHELTER_TYPE_KEYWORD_BY_DISASTER = {
+    "폭염": "무더위쉼터",
+    "한파": "한파쉼터",
+    "지진": "지진옥외대피장소",
+    "지진해일": "지진해일대피장소",
+}
 (
     ALERT_TIME_COLUMN,
     ALERT_REGION_COLUMN,
@@ -93,43 +99,14 @@ def load_map_html(path_value: str) -> str:
     raise UnicodeDecodeError("unknown", b"", 0, 1, f"Unable to decode {path}")
 
 
-def _get_repo_default_db_dir() -> Path:
-    return Path(__file__).resolve().parents[1] / "preprocessing_code" / "data"
+def _get_repo_default_db_path() -> Path:
+    return Path(__file__).resolve().parents[1] / "preprocessing_code" / "data" / "simple_shelter_dashboard.db"
 
 
-def _find_db_in_directory(directory: Path) -> Path | None:
-    if not directory.exists() or not directory.is_dir():
-        return None
-
-    for preferred_name in ("Emergency_shelter.db", "Emergency_Shelter.db"):
-        preferred_path = directory / preferred_name
-        if preferred_path.exists():
-            return preferred_path
-
-    matches = sorted(directory.glob("*.db"))
-    if matches:
-        return matches[0]
-    return None
-
-
-def resolve_disaster_db_path(path_override: str | Path | None = None) -> Path | None:
-    candidate_roots = [Path(path_override)] if path_override is not None else [_get_repo_default_db_dir()]
-
-    for candidate in candidate_roots:
-        resolved = candidate.expanduser().resolve()
-        if resolved.is_file() and resolved.suffix.lower() == ".db":
-            return resolved
-
-        for directory in (
-            resolved / "preprocessing_code" / "data",
-            resolved.parent / "preprocessing_code" / "data",
-            resolved / "data",
-            resolved,
-        ):
-            database_path = _find_db_in_directory(directory)
-            if database_path is not None:
-                return database_path.resolve()
-
+def resolve_disaster_db_path(_path_override: str | Path | None = None) -> Path | None:
+    database_path = _get_repo_default_db_path().resolve()
+    if database_path.is_file():
+        return database_path
     return None
 
 
@@ -140,15 +117,15 @@ def _load_alerts_dataframe_from_db(path_override: str | Path | None = None) -> p
 
     query = """
         SELECT
-            da.발표시간,
-            r.시도 AS 지역,
-            r.시군구,
-            dt.재난이름 AS 재난종류,
-            da.특보등급,
-            da.해당지역
+            da."발표시간" AS "발표시간",
+            r."시도" AS "지역",
+            r."시군구" AS "시군구",
+            dt."재난유형" AS "재난종류",
+            da."특보등급" AS "특보등급",
+            da."해당지역" AS "해당지역"
         FROM danger_alerts AS da
-        LEFT JOIN regions AS r ON da.지역_id = r.지역_id
-        LEFT JOIN disaster_types AS dt ON da.재난유형_id = dt.재난유형_id
+        LEFT JOIN regions AS r ON da.region_id = r.region_id
+        LEFT JOIN disaster_types AS dt ON da.disaster_type_id = dt.disaster_type_id
     """
     with sqlite3.connect(database_path) as connection:
         alerts = pd.read_sql_query(query, connection)
@@ -163,22 +140,68 @@ def _load_shelters_dataframe_from_db(path_override: str | Path | None = None) ->
 
     query = """
         SELECT
-            s.대피소명,
-            s.주소,
-            s.대피소유형,
-            s.위도,
-            s.경도,
-            r.시도,
-            r.시군구,
-            COALESCE(s.지역설명, r.시도) AS 지역,
-            s.수용인원
+            s."대피소명" AS "대피소명",
+            s."주소" AS "주소",
+            s."대피소유형" AS "대피소유형",
+            s."위도" AS "위도",
+            s."경도" AS "경도",
+            r."시도" AS "시도",
+            r."시군구" AS "시군구",
+            COALESCE(
+                s."지진설명",
+                CASE
+                    WHEN r."시군구" IS NULL OR r."시군구" = '' THEN r."시도"
+                    ELSE r."시도" || ' ' || r."시군구"
+                END
+            ) AS "지역",
+            s."수용인원" AS "수용인원",
+            rel."지원재난유형" AS "지원재난유형"
         FROM shelters AS s
-        LEFT JOIN regions AS r ON s.지역_id = r.지역_id
+        LEFT JOIN regions AS r ON s.region_id = r.region_id
+        LEFT JOIN (
+            SELECT
+                sdr.shelter_id,
+                GROUP_CONCAT(DISTINCT dt."재난유형") AS "지원재난유형"
+            FROM shelter_disaster_relations AS sdr
+            LEFT JOIN disaster_types AS dt ON sdr.disaster_type_id = dt.disaster_type_id
+            GROUP BY sdr.shelter_id
+        ) AS rel ON s.shelter_id = rel.shelter_id
     """
     with sqlite3.connect(database_path) as connection:
         shelters = pd.read_sql_query(query, connection)
 
-    return _prepare_shelters(shelters.loc[:, SHELTER_COLUMNS])
+    shelters = _prepare_shelters(shelters)
+    shelters["지원재난유형"] = shelters["지원재난유형"].fillna("").astype(str).str.strip()
+    return shelters
+
+
+def _supports_disaster(support_text: str, shelter_type: str, disaster_name: str) -> bool:
+    support_values = [value.strip() for value in support_text.split(",") if value.strip()]
+    if disaster_name in support_values:
+        return True
+
+    fallback_keyword = SHELTER_TYPE_KEYWORD_BY_DISASTER.get(disaster_name, "")
+    if fallback_keyword and fallback_keyword in shelter_type:
+        return True
+
+    return False
+
+
+def filter_shelters_by_disasters(dataframe: pd.DataFrame, selected_disasters: list[str]) -> pd.DataFrame:
+    if dataframe.empty:
+        return dataframe.copy()
+
+    if not selected_disasters:
+        return dataframe.iloc[0:0].copy()
+
+    support_texts = dataframe.get("지원재난유형", pd.Series("", index=dataframe.index)).fillna("").astype(str)
+    shelter_types = dataframe["대피소유형"].fillna("").astype(str)
+
+    matched = [
+        any(_supports_disaster(support_text, shelter_type, disaster_name) for disaster_name in selected_disasters)
+        for support_text, shelter_type in zip(support_texts, shelter_types)
+    ]
+    return dataframe.loc[matched].copy()
 
 
 def load_alerts_dataframe_uncached(path_override: str | Path | None = None) -> pd.DataFrame:
@@ -587,10 +610,24 @@ def summarize_shelters_by_region(dataframe: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=["지역", "무더위쉼터_합계", "지진대피소_합계", "한파쉼터", "대피소_합계"])
 
     shelters = dataframe.copy()
-    shelter_type = shelters["대피소유형"].fillna("")
-    shelters["무더위쉼터_합계"] = shelter_type.str.contains("무더위쉼터", na=False).astype(int)
-    shelters["지진대피소_합계"] = shelter_type.str.contains("지진옥외대피장소|지진해일대피장소", regex=True).astype(int)
-    shelters["한파쉼터"] = shelter_type.str.contains("한파쉼터", na=False).astype(int)
+    support_texts = shelters.get("지원재난유형", pd.Series("", index=shelters.index)).fillna("").astype(str)
+    shelter_types = shelters["대피소유형"].fillna("").astype(str)
+
+    shelters["무더위쉼터_합계"] = [
+        int(_supports_disaster(support_text, shelter_type, "폭염"))
+        for support_text, shelter_type in zip(support_texts, shelter_types)
+    ]
+    shelters["지진대피소_합계"] = [
+        int(
+            _supports_disaster(support_text, shelter_type, "지진")
+            or _supports_disaster(support_text, shelter_type, "지진해일")
+        )
+        for support_text, shelter_type in zip(support_texts, shelter_types)
+    ]
+    shelters["한파쉼터"] = [
+        int(_supports_disaster(support_text, shelter_type, "한파"))
+        for support_text, shelter_type in zip(support_texts, shelter_types)
+    ]
 
     summary = (
         shelters.groupby("시도", as_index=False)[["무더위쉼터_합계", "지진대피소_합계", "한파쉼터"]]
@@ -673,6 +710,7 @@ def render_page() -> None:
         selected_grades=selected_grades,
     )
     filtered_shelters = shelters_frame[shelters_frame["시도"].isin(selected_regions)].copy()
+    filtered_shelters = filter_shelters_by_disasters(filtered_shelters, selected_disasters)
 
     if filtered_alerts.empty:
         st.warning("선택한 조건에 맞는 분석 데이터가 없습니다. 필터를 조정해 주세요.")
